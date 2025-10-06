@@ -1,0 +1,15 @@
+# Node
+node_modules/
+dist/
+
+# OS
+.DS_Store
+
+# Logs
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor
+.vscode/
+.idea/

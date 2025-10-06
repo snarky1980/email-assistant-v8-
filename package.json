@@ -13,6 +13,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "serve:static": "npx http-server -p 5173 .",
     "deploy": "npm run build && gh-pages -d dist"
   },
   "dependencies": {
