@@ -53,3 +53,23 @@ npm run serve:static
 ```
 
 This serves the current folder on http://localhost:5173 and preserves the exact pill UI version.
+
+## Admin Console (non‑coder friendly)
+
+We added a standalone, static Admin Console to edit templates and variables without coding.
+
+- Open: http://localhost:5173/admin.html (same static server as above)
+- Import JSON: Load any existing `complete_email_templates.json` (optional; the console also auto-loads the file from the project root if available).
+- Edit:
+	- Templates tab: change id, category, localized title/description/subject/body, and pick variables via checkboxes.
+	- Variables tab: add/edit variables with FR/EN descriptions, format (text/number/date/time), and example values.
+	- Metadata tab: update version and categories (languages are fixed to fr/en by the app).
+- Save draft: Keeps your changes locally in your browser (no server write). You can close and come back later.
+- Export JSON: Downloads a validated `complete_email_templates.json` file. Replace the file at the repository root and commit.
+- Reset: Clears the local draft and reloads the original JSON from the server.
+
+Validation & guardrails:
+- Warns on duplicate template IDs, unknown categories, missing variables, or placeholders like `<<Var>>` not listed in a template’s variable list.
+- Warnings don’t block export, but they help maintain data quality.
+
+Tip: Keep your current app open on `/` while editing in `/admin.html` to preview templates as you iterate (after replacing the JSON file and reloading).
