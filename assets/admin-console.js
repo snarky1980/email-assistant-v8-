@@ -9,6 +9,8 @@
   let selectedTemplateId = null;
   let searchTerm = '';
   let filterCategory = 'all';
+  let bulkMode = false;
+  let selectedTemplateIds = new Set();
 
   // DOM
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -138,12 +140,33 @@
 
   function renderSidebar() {
     const list = getFilteredTemplates();
-    tplList.innerHTML = list.map(t => {
+    const cats = (data.metadata.categories || []);
+    const bulkHeader = `
+      <div id="bulk-header" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+        <label style="display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" id="toggle-bulk" ${bulkMode ? 'checked' : ''}>
+          <span>Sélection multiple</span>
+        </label>
+        ${bulkMode ? `
+        <span style="color:var(--muted);">${selectedTemplateIds.size} sélectionné(s)</span>
+        <button id="bulk-select-all">Tout sélectionner</button>
+        <button id="bulk-clear">Effacer</button>
+        <span style="margin-left:12px;">Définir catégorie:</span>
+        <select id="bulk-cat">
+          <option value="">(aucune)</option>
+          ${cats.map(c => `<option value="${escapeAttr(c)}">${escapeHtml(c)}</option>`).join('')}
+        </select>
+        <button id="bulk-apply" class="primary">Appliquer</button>
+        ` : ''}
+      </div>`;
+
+    tplList.innerHTML = bulkHeader + list.map(t => {
       const title = (t.title && t.title[lang]) || t.id;
       const cat = t.category || '-';
       const varsCount = (t.variables || []).length;
       return `
-        <div class="tile" data-id="${escapeAttr(t.id)}" role="button" tabindex="0">
+        <div class="tile" data-id="${escapeAttr(t.id)}" role="button" tabindex="0" style="position:relative;">
+          ${bulkMode ? `<input type="checkbox" class="sel" data-sel="${escapeAttr(t.id)}" ${selectedTemplateIds.has(t.id)?'checked':''} style="position:absolute;left:8px;top:8px;">` : ''}
           <div class="title">${escapeHtml(title)}</div>
           <div class="meta">
             <span class="pill">${escapeHtml(cat)}</span>
@@ -155,12 +178,55 @@
 
     // selection handle
     $$('.tile', tplList).forEach(el => {
-      el.onclick = () => {
+      el.onclick = (e) => {
+        if (bulkMode) return; // In bulk mode, clicking tiles won’t navigate
         selectedTemplateId = el.dataset.id;
         renderMain();
       };
-      el.onkeypress = (e) => { if (e.key === 'Enter') el.click(); };
+      el.onkeypress = (e) => { if (!bulkMode && e.key === 'Enter') el.click(); };
     });
+    // bulk selection checkboxes
+    $$('.sel', tplList).forEach(cb => {
+      cb.onclick = (e) => { e.stopPropagation(); };
+      cb.onchange = (e) => {
+        const id = e.target.dataset.sel;
+        if (e.target.checked) selectedTemplateIds.add(id); else selectedTemplateIds.delete(id);
+        // Update count without full rerender
+        const hdr = $('#bulk-header');
+        if (hdr) {
+          const span = hdr.querySelector('span[style*="color"][style*="muted"]');
+          if (span) span.textContent = `${selectedTemplateIds.size} sélectionné(s)`;
+        }
+      };
+    });
+    const toggle = $('#toggle-bulk');
+    if (toggle) {
+      toggle.onchange = () => {
+        bulkMode = toggle.checked;
+        if (!bulkMode) selectedTemplateIds.clear();
+        renderSidebar();
+      };
+    }
+    const selAll = $('#bulk-select-all');
+    if (selAll) selAll.onclick = () => {
+      list.forEach(t => selectedTemplateIds.add(t.id));
+      renderSidebar();
+    };
+    const clearSel = $('#bulk-clear');
+    if (clearSel) clearSel.onclick = () => { selectedTemplateIds.clear(); renderSidebar(); };
+    const apply = $('#bulk-apply');
+    if (apply) apply.onclick = () => {
+      const newCat = $('#bulk-cat')?.value || '';
+      if (selectedTemplateIds.size === 0) { notify('Aucun template sélectionné.', 'warn'); return; }
+      data.templates.forEach(t => {
+        if (selectedTemplateIds.has(t.id)) t.category = newCat;
+      });
+      saveDraft();
+      renderSidebar();
+      renderTemplateEditor();
+      renderWarnings();
+      notify('Catégorie appliquée aux éléments sélectionnés.');
+    };
   }
 
   function getFilteredTemplates() {
@@ -482,8 +548,24 @@
 
       <div class="field">
         <label>Catégories</label>
-        <div class="chips" id="cat-chips">
-          ${cats.map(c => `<span class="chip">${escapeHtml(c)} <button title="Supprimer" data-cat="${escapeAttr(c)}">×</button></span>`).join('')}
+        <div id="cat-list" style="display:grid;gap:8px;">
+          ${cats.length ? cats.map((c, i) => `
+            <div class="row" data-cat-row>
+              <div class="field">
+                <label>Nom</label>
+                <input data-cat-input value="${escapeAttr(c)}" />
+              </div>
+              <div class="field">
+                <label>&nbsp;</label>
+                <div style="display:flex;gap:8px;">
+                  <button data-cat-up data-idx="${i}" ${i===0?'disabled':''}>↑</button>
+                  <button data-cat-down data-idx="${i}" ${i===cats.length-1?'disabled':''}>↓</button>
+                  <button class="primary" data-cat-save data-orig="${escapeAttr(c)}">Enregistrer</button>
+                  <button class="danger" data-cat-delete data-orig="${escapeAttr(c)}">Supprimer</button>
+                </div>
+              </div>
+            </div>
+          `).join('') : `<div class="hint">Aucune catégorie. Ajoutez-en ci-dessous.</div>`}
         </div>
         <div class="row">
           <div class="field"><input id="cat-new" placeholder="Ajouter une catégorie…" /></div>
@@ -509,17 +591,74 @@
       renderTemplateEditor();
     };
 
-    $$('#cat-chips [data-cat]').forEach(btn => {
+    // Save (rename) and delete handlers for each row
+    $$('#cat-list [data-cat-save]').forEach(btn => {
       btn.onclick = () => {
-        const c = btn.dataset.cat;
-        if (!confirm(`Supprimer la catégorie "${c}" ?`)) return;
-        m.categories = (m.categories || []).filter(x => x !== c);
-        // Unset category on templates that used it
-        data.templates.forEach(t => { if (t.category === c) t.category = ''; });
+        const orig = btn.dataset.orig;
+        const row = btn.closest('[data-cat-row]');
+        const input = row?.querySelector('[data-cat-input]');
+        const next = (input?.value || '').trim();
+        if (!next) { notify('Nom de catégorie vide.', 'warn'); return; }
+        if (orig === next) { notify('Aucun changement à enregistrer.'); return; }
+        const exists = (m.categories || []).some(c => c === next);
+        if (exists) { notify('Cette catégorie existe déjà.', 'warn'); return; }
+        // Replace in metadata
+        m.categories = (m.categories || []).map(c => c === orig ? next : c);
+        // Propagate to templates
+        data.templates.forEach(t => { if (t.category === orig) t.category = next; });
+        // Update active filter if needed
+        if (typeof filterCategory === 'string' && filterCategory === orig) filterCategory = next;
         saveDraft();
         renderCategoryFilter();
         renderMetadataEditor();
         renderTemplateEditor();
+        renderSidebar();
+        notify('Catégorie renommée.');
+      };
+    });
+
+    $$('#cat-list [data-cat-delete]').forEach(btn => {
+      btn.onclick = () => {
+        const c = btn.dataset.orig;
+        if (!confirm(`Supprimer la catégorie \"${c}\" ?`)) return;
+        m.categories = (m.categories || []).filter(x => x !== c);
+        // Unset category on templates that used it
+        data.templates.forEach(t => { if (t.category === c) t.category = ''; });
+        // Reset filter if pointing to deleted category
+        if (filterCategory === c) filterCategory = 'all';
+        saveDraft();
+        renderCategoryFilter();
+        renderMetadataEditor();
+        renderTemplateEditor();
+        renderSidebar();
+      };
+    });
+
+    // Reorder up/down
+    $$('#cat-list [data-cat-up]').forEach(btn => {
+      btn.onclick = () => {
+        const idx = parseInt(btn.dataset.idx, 10);
+        if (isNaN(idx) || idx <= 0) return;
+        const arr = m.categories || [];
+        [arr[idx-1], arr[idx]] = [arr[idx], arr[idx-1]];
+        saveDraft();
+        renderCategoryFilter();
+        renderMetadataEditor();
+        renderTemplateEditor();
+        renderSidebar();
+      };
+    });
+    $$('#cat-list [data-cat-down]').forEach(btn => {
+      btn.onclick = () => {
+        const idx = parseInt(btn.dataset.idx, 10);
+        const arr = m.categories || [];
+        if (isNaN(idx) || idx >= arr.length - 1) return;
+        [arr[idx], arr[idx+1]] = [arr[idx+1], arr[idx]];
+        saveDraft();
+        renderCategoryFilter();
+        renderMetadataEditor();
+        renderTemplateEditor();
+        renderSidebar();
       };
     });
   }
