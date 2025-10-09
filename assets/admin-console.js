@@ -259,6 +259,24 @@
     if (viewMetadata.style.display !== 'none') renderMetadataEditor();
   }
 
+  // Auto-detect helpers
+  function getAutoDetect() {
+    try { return localStorage.getItem('ea_vars_auto') !== 'false'; } catch { return true; }
+  }
+  function setAutoDetect(v) {
+    try { localStorage.setItem('ea_vars_auto', v ? 'true' : 'false'); } catch {}
+  }
+  function extractPlaceholdersFromTemplate(t) {
+    const parts = [];
+    ['fr','en'].forEach(L => {
+      if (t.subject && typeof t.subject[L] === 'string') parts.push(t.subject[L]);
+      if (t.body && typeof t.body[L] === 'string') parts.push(t.body[L]);
+    });
+    const txt = parts.join('\n');
+    const set = new Set([...txt.matchAll(/<<([^>]+)>>/g)].map(m => m[1]));
+    return Array.from(set).sort();
+  }
+
   function renderTemplateEditor() {
     const t = data.templates.find(x => x.id === selectedTemplateId) || data.templates[0];
     if (!t) {
@@ -270,7 +288,7 @@
     const cats = data.metadata.categories || [];
     const allVars = Object.keys(data.variables || {}).sort();
 
-    viewTemplates.innerHTML = `
+  viewTemplates.innerHTML = `
       <div class="row">
         <div class="field">
           <label>ID (unique, utilisé par l’application)</label>
@@ -311,14 +329,17 @@
 
       <div class="field">
         <label>Variables utilisées</label>
-        <div id="vars-box" style="display:grid;grid-template-columns: repeat(auto-fill,minmax(200px,1fr)); gap:8px; border:1px solid var(--border); padding:10px; border-radius:12px; max-height:220px; overflow:auto;">
-          ${allVars.length ? allVars.map(v => `
-            <label style="display:flex;align-items:center;gap:8px;">
-              <input type="checkbox" value="${escapeAttr(v)}" ${Array.isArray(t.variables) && t.variables.includes(v) ? 'checked':''}>
-              <span>${escapeHtml(v)}</span>
-            </label>
-          `).join('') : `<div class="hint">Aucune variable définie pour l’instant (onglet Variables).</div>`}
+        <div id="vars-toolbar" style="display:flex;gap:8px;align-items:center;margin:6px 0 8px;flex-wrap:wrap;">
+          <input id="vars-filter" placeholder="Filtrer les variables..." style="flex:1 1 220px;min-width:140px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;" />
+          <button id="btn-vars-all" type="button">Tout</button>
+          <button id="btn-vars-none" type="button">Aucun</button>
+          <label style="display:inline-flex;align-items:center;gap:6px;margin-left:auto;">
+            <input id="vars-auto" type="checkbox" ${getAutoDetect() ? 'checked' : ''}>
+            <span>Auto-détecter</span>
+          </label>
+          <button id="btn-vars-detect" type="button">Détecter maintenant</button>
         </div>
+        <div id="vars-box" style="border:1px solid var(--border);padding:10px;border-radius:12px;max-height:240px;overflow-y:auto;overflow-x:hidden;"></div>
       </div>
 
       <div class="hint">Astuce: changez la langue en haut (FR/EN) pour éditer l’autre version.</div>
@@ -371,19 +392,99 @@
       saveDraft();
     };
 
-    $$('#vars-box input[type="checkbox"]').forEach(cb => {
-      cb.onchange = () => {
-        t.variables = Array.isArray(t.variables) ? t.variables : [];
-        if (cb.checked) {
-          if (!t.variables.includes(cb.value)) t.variables.push(cb.value);
-        } else {
-          t.variables = t.variables.filter(x => x !== cb.value);
-        }
+    const renderVars = () => {
+      const auto = getAutoDetect();
+      const detected = extractPlaceholdersFromTemplate(t);
+      if (auto) {
+        t.variables = detected.slice();
         saveDraft();
-        renderWarnings();
-        renderSidebar();
-      };
-    });
+      }
+      const term = ($('#vars-filter')?.value || '').trim().toLowerCase();
+      const source = auto ? detected : allVars;
+      const list = source.filter(v => v.toLowerCase().includes(term));
+      const cells = (name) => name ? `
+        <td style=\"vertical-align:top;width:50%;padding:4px 6px;\">
+          <label class=\"var-item\" title=\"${escapeAttr(name)}\" style=\"display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none;white-space:nowrap;\">
+            <input type=\"checkbox\" value=\"${escapeAttr(name)}\" ${Array.isArray(t.variables) && t.variables.includes(name) ? 'checked':''} ${auto ? 'disabled' : ''}>
+            <span class=\"var-name\" style=\"line-height:1.3;\">${escapeHtml(name)}</span>
+          </label>
+        </td>` : `<td style=\"width:50%\"></td>`;
+      if (!list.length) {
+        const baseEmpty = source.length ? 'Aucune variable ne correspond au filtre.' : (auto ? 'Aucun placeholder <<NomVariable>> trouvé dans Objet/Corps.' : 'Aucune variable définie pour l’instant (onglet Variables).');
+        $('#vars-box').innerHTML = `<div class=\"hint\">${baseEmpty}</div>`;
+      } else {
+        const rows = [];
+        for (let i = 0; i < list.length; i += 2) {
+          const v1 = list[i];
+          const v2 = list[i+1];
+          rows.push(`<tr>${cells(v1)}${cells(v2)}</tr>`);
+        }
+        $('#vars-box').innerHTML = `<table style=\"width:100%;border-collapse:separate;border-spacing:8px 6px;\">${rows.join('')}</table>`;
+      }
+      if (!auto) $$('#vars-box input[type=\"checkbox\"]').forEach(cb => {
+        cb.onchange = () => {
+          t.variables = Array.isArray(t.variables) ? t.variables : [];
+          if (cb.checked) {
+            if (!t.variables.includes(cb.value)) t.variables.push(cb.value);
+          } else {
+            t.variables = t.variables.filter(x => x !== cb.value);
+          }
+          saveDraft();
+          renderWarnings();
+          renderSidebar();
+        };
+      });
+    };
+    renderVars();
+    const getFilteredList = () => {
+      const term = ($('#vars-filter')?.value || '').trim().toLowerCase();
+      return allVars.filter(v => v.toLowerCase().includes(term));
+    };
+    const btnAll = $('#btn-vars-all');
+    const btnNone = $('#btn-vars-none');
+    if (btnAll) btnAll.onclick = () => {
+      if (getAutoDetect()) return; // disabled in auto mode
+      const visible = getFilteredList();
+      t.variables = Array.isArray(t.variables) ? t.variables : [];
+      visible.forEach(v => { if (!t.variables.includes(v)) t.variables.push(v); });
+      saveDraft();
+      renderVars();
+      renderWarnings();
+      renderSidebar();
+    };
+    if (btnNone) btnNone.onclick = () => {
+      if (getAutoDetect()) return; // disabled in auto mode
+      const visible = getFilteredList();
+      t.variables = Array.isArray(t.variables) ? t.variables : [];
+      t.variables = t.variables.filter(v => !visible.includes(v));
+      saveDraft();
+      renderVars();
+      renderWarnings();
+      renderSidebar();
+    };
+    const inpFilter = $('#vars-filter');
+    if (inpFilter) inpFilter.oninput = renderVars;
+    const chkAuto = $('#vars-auto');
+    if (chkAuto) chkAuto.onchange = () => {
+      setAutoDetect(chkAuto.checked);
+      renderVars();
+      renderWarnings();
+      renderSidebar();
+    };
+    const btnDetect = $('#btn-vars-detect');
+    if (btnDetect) btnDetect.onclick = () => {
+      const detected = extractPlaceholdersFromTemplate(t);
+      if (getAutoDetect()) {
+        t.variables = detected.slice();
+      } else {
+        t.variables = Array.isArray(t.variables) ? t.variables : [];
+        detected.forEach(v => { if (!t.variables.includes(v)) t.variables.push(v); });
+      }
+      saveDraft();
+      renderVars();
+      renderWarnings();
+      renderSidebar();
+    };
 
     // Duplicate/Delete toolbar
     btnDuplicate.onclick = () => {
@@ -461,7 +562,12 @@
                   </select>
                 </div>
                 <div class="field"><label>Exemple</label><input data-edit="example" value="${escapeAttr(v.example || '')}" /></div>
-                <div class="field"><label>&nbsp;</label><button data-action="delete" class="danger">Supprimer</button></div>
+                  <div class="field"><label>&nbsp;</label>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap">
+                      <button data-action="rename">Renommer</button>
+                      <button data-action="delete" class="danger">Supprimer</button>
+                    </div>
+                  </div>
               </div>
             </div>
           `;
@@ -527,6 +633,37 @@
         renderWarnings();
         updateKpis();
       };
+        const btnRen = tile.querySelector('[data-action="rename"]');
+        if (btnRen) {
+          btnRen.onclick = () => {
+            const oldName = name;
+            const next = prompt('Nouveau nom de la variable :', oldName);
+            if (!next || next === oldName) return;
+            const key = next.trim();
+            if (!/^[A-Za-zÀ-ÖØ-öø-ÿ0-9_]+$/.test(key)) { notify('Nom invalide. Lettres/chiffres/underscore uniquement.', 'warn'); return; }
+            if (data.variables[key]) { notify('Une variable avec ce nom existe déjà.', 'warn'); return; }
+            data.variables[key] = data.variables[oldName];
+            delete data.variables[oldName];
+            data.templates.forEach(t => {
+              if (Array.isArray(t.variables)) {
+                t.variables = t.variables.map(v => v === oldName ? key : v);
+              }
+              ['fr','en'].forEach(L => {
+                if (t.subject && typeof t.subject[L] === 'string') {
+                  t.subject[L] = t.subject[L].split(`<<${oldName}>>`).join(`<<${key}>>`);
+                }
+                if (t.body && typeof t.body[L] === 'string') {
+                  t.body[L] = t.body[L].split(`<<${oldName}>>`).join(`<<${key}>>`);
+                }
+              });
+            });
+            saveDraft();
+            renderVariablesEditor();
+            renderTemplateEditor();
+            renderWarnings();
+            updateKpis();
+          };
+        }
     });
   }
 
@@ -621,18 +758,18 @@
       btn.onclick = () => {
         const c = btn.dataset.orig;
         if (!confirm(`Supprimer la catégorie \"${c}\" ?`)) return;
-        m.categories = (m.categories || []).filter(x => x !== c);
-        // Unset category on templates that used it
-        data.templates.forEach(t => { if (t.category === c) t.category = ''; });
-        // Reset filter if pointing to deleted category
-        if (filterCategory === c) filterCategory = 'all';
-        saveDraft();
-        renderCategoryFilter();
-        renderMetadataEditor();
-        renderTemplateEditor();
-        renderSidebar();
-      };
-    });
+    m.categories = (m.categories || []).filter(x => x !== c);
+    // Unset category on templates that used it
+    data.templates.forEach(t => { if (t.category === c) t.category = ''; });
+    // Reset filter if pointing to deleted category
+    if (filterCategory === c) filterCategory = 'all';
+    saveDraft();
+    renderCategoryFilter();
+    renderMetadataEditor();
+    renderTemplateEditor();
+    renderSidebar();
+  };
+});
 
     // Reorder up/down
     $$('#cat-list [data-cat-up]').forEach(btn => {
