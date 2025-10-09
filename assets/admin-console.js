@@ -5,7 +5,7 @@
 
   // State
   let data = null;              // { metadata, variables, templates }
-  let lang = 'fr';              // UI edit language toggle for localized fields
+  let lang = (function(){ try { return localStorage.getItem('ea_admin_lang') || 'fr'; } catch { return 'fr'; } })(); // UI edit language toggle for localized fields
   let selectedTemplateId = null;
   let searchTerm = '';
   let filterCategory = 'all';
@@ -18,6 +18,7 @@
   const kpiTemplates = $('#kpi-templates');
   const kpiVariables = $('#kpi-variables');
   const warningsEl = $('#warnings');
+  const noticeEl = $('#notice');
 
   const langSwitch = $('#lang-switch');
   const fileInput = $('#file-input');
@@ -41,6 +42,9 @@
   const btnDuplicate = $('#btn-duplicate');
   const btnDelete = $('#btn-delete');
   const btnSave = $('#btn-save');
+  const btnPreview = $('#btn-preview');
+  // Keep a short-lived snapshot of the last non-empty warnings
+  let lastWarnSnapshot = { items: [], at: 0 };
 
   // Utils
   const debounce = (fn, ms = 300) => {
@@ -61,19 +65,22 @@
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(data, null, 2));
       notify('Brouillon enregistré localement.');
+      renderWarnings();
     } catch (e) {
       notify('Erreur lors de l’enregistrement du brouillon.', 'warn');
       console.error(e);
     }
   }, 400);
 
+  // Ephemeral notification (does not hide persistent warnings)
   const notify = (msg, type = 'info') => {
-    warningsEl.style.display = 'block';
-    warningsEl.className = 'warn';
-    warningsEl.innerHTML = `<strong>${type === 'warn' ? 'Note' : 'Info'}:</strong> ${msg}`;
-    setTimeout(() => {
-      warningsEl.style.display = 'none';
-    }, 3000);
+    if (!noticeEl) return;
+    noticeEl.style.display = 'block';
+    noticeEl.style.background = (type === 'warn') ? '#7c2d12' : '#111827';
+    noticeEl.style.borderColor = (type === 'warn') ? '#fed7aa' : 'rgba(255,255,255,0.1)';
+    noticeEl.textContent = msg;
+    clearTimeout(notify._t);
+    notify._t = setTimeout(() => { noticeEl.style.display = 'none'; }, 2500);
   };
 
   function ensureSchema(obj) {
@@ -115,6 +122,7 @@
     renderMain();
     updateKpis();
     renderWarnings();
+    if (langSwitch) langSwitch.value = lang;
   }
 
   function updateKpis() {
@@ -124,12 +132,77 @@
 
   function renderWarnings() {
     const issues = validateData();
+    let pinStored = null; try { pinStored = localStorage.getItem('ea_pin_warnings'); } catch {}
+    let pinned = (pinStored === 'true' || pinStored === null); // default to pinned if not set
+    try { if (pinStored === null) localStorage.setItem('ea_pin_warnings', 'true'); } catch {}
+    let collapsed = false; try { collapsed = localStorage.getItem('ea_warn_collapsed') === 'true'; } catch {}
     if (issues.length) {
+      // store snapshot of current issues
+      lastWarnSnapshot = { items: issues.slice(0, 50), at: Date.now() };
       warningsEl.style.display = 'block';
       warningsEl.className = 'warn';
-      warningsEl.innerHTML = `<strong>Avertissements (${issues.length})</strong><ul style="margin:6px 0 0 18px">${issues.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>`;
+      warningsEl.innerHTML = `
+        <div class="status-bar">
+          <div><strong>Avertissements (${issues.length})</strong></div>
+          <div class="status-actions">
+            <button id="toggle-warn" title="Afficher/Masquer le détail">${collapsed ? 'Afficher' : 'Masquer'}</button>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:600;color:#9a3412;">
+              <input type="checkbox" id="pin-warnings"> Garder affiché
+            </label>
+          </div>
+        </div>
+        <div id="warn-details" style="margin-top:8px; ${collapsed ? 'display:none;' : ''}">
+          <ul style="margin:6px 0 0 18px">${issues.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
+        </div>`;
+      const pin = document.getElementById('pin-warnings');
+      if (pin) {
+        try { pin.checked = pinned; } catch {}
+        pin.onchange = () => { try { localStorage.setItem('ea_pin_warnings', pin.checked ? 'true' : 'false'); } catch {} };
+      }
+      const tog = document.getElementById('toggle-warn');
+      if (tog) {
+        tog.onclick = () => {
+          const box = document.getElementById('warn-details');
+          if (!box) return;
+          const hide = box.style.display !== 'none' ? true : false;
+          box.style.display = hide ? 'none' : '';
+          tog.textContent = hide ? 'Afficher' : 'Masquer';
+          try { localStorage.setItem('ea_warn_collapsed', hide ? 'true' : 'false'); } catch {}
+        };
+      }
     } else {
-      warningsEl.style.display = 'none';
+      warningsEl.style.display = pinned ? 'block' : 'none';
+      if (pinned) {
+        warningsEl.className = 'ok';
+        const showRecent = (Date.now() - (lastWarnSnapshot.at || 0)) < 5000 && (lastWarnSnapshot.items || []).length > 0;
+        warningsEl.innerHTML = `
+          <div class="status-bar">
+            <div><strong>Aucun avertissement</strong></div>
+            <div class="status-actions">
+              <button id="toggle-warn" title="Afficher/Masquer le détail">${collapsed ? 'Afficher' : 'Masquer'}</button>
+              <label style="display:flex;align-items:center;gap:6px;font-weight:600;color:#166534;">
+                <input type="checkbox" id="pin-warnings" checked> Garder affiché
+              </label>
+            </div>
+          </div>
+          <div id="warn-details" style="margin-top:8px; ${collapsed ? 'display:none;' : ''}">
+            ${showRecent ? `
+              <div class="hint" style="margin-bottom:6px;">Avertissements récents (peuvent avoir été résolus automatiquement):</div>
+              <ul style="margin:6px 0 0 18px">${lastWarnSnapshot.items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
+            ` : `<div class="hint">Tout est valide pour le moment.</div>`}
+          </div>`;
+        const pin = document.getElementById('pin-warnings');
+        if (pin) pin.onchange = () => { try { localStorage.setItem('ea_pin_warnings', pin.checked ? 'true' : 'false'); if (!pin.checked) warningsEl.style.display = 'none'; } catch {} };
+        const tog = document.getElementById('toggle-warn');
+        if (tog) tog.onclick = () => {
+          const box = document.getElementById('warn-details');
+          if (!box) return;
+          const hide = box.style.display !== 'none' ? true : false;
+          box.style.display = hide ? 'none' : '';
+          tog.textContent = hide ? 'Afficher' : 'Masquer';
+          try { localStorage.setItem('ea_warn_collapsed', hide ? 'true' : 'false'); } catch {}
+        };
+      }
     }
   }
 
@@ -164,8 +237,9 @@
       const title = (t.title && t.title[lang]) || t.id;
       const cat = t.category || '-';
       const varsCount = (t.variables || []).length;
+      const isActive = (t.id === selectedTemplateId);
       return `
-        <div class="tile" data-id="${escapeAttr(t.id)}" role="button" tabindex="0" style="position:relative;">
+        <div class="tile ${isActive ? 'active' : ''}" data-id="${escapeAttr(t.id)}" role="button" tabindex="0" style="position:relative;">
           ${bulkMode ? `<input type="checkbox" class="sel" data-sel="${escapeAttr(t.id)}" ${selectedTemplateIds.has(t.id)?'checked':''} style="position:absolute;left:8px;top:8px;">` : ''}
           <div class="title">${escapeHtml(title)}</div>
           <div class="meta">
@@ -181,6 +255,7 @@
       el.onclick = (e) => {
         if (bulkMode) return; // In bulk mode, clicking tiles won’t navigate
         selectedTemplateId = el.dataset.id;
+        renderSidebar(); // refresh highlight
         renderMain();
       };
       el.onkeypress = (e) => { if (!bulkMode && e.key === 'Enter') el.click(); };
@@ -277,6 +352,24 @@
     return Array.from(set).sort();
   }
 
+  // Heuristic inference for variable metadata
+  function inferVariableMeta(name) {
+    const n = String(name || '');
+    let format = 'text';
+    if (/Montant|Tarif|Nb(?![A-Za-zÀ-ÖØ-öø-ÿ]*[a-z])/i.test(n) || /Nombre/i.test(n)) format = 'number';
+    if (/Heure|HeureLimite/i.test(n)) format = 'time';
+    if (/Date|Délai|NouvelleDate|DateInitiale/i.test(n)) format = 'date';
+    let example = '';
+    if (format === 'number') example = '0';
+    if (format === 'time') example = '17:00';
+    if (format === 'date') example = '2025-01-01';
+    return {
+      description: { fr: '', en: '' },
+      format,
+      example
+    };
+  }
+
   function renderTemplateEditor() {
     const t = data.templates.find(x => x.id === selectedTemplateId) || data.templates[0];
     if (!t) {
@@ -339,10 +432,34 @@
           </label>
           <button id="btn-vars-detect" type="button">Détecter maintenant</button>
         </div>
+        <div id="vars-missing" style="margin:6px 0 10px;"></div>
         <div id="vars-box" style="border:1px solid var(--border);padding:10px;border-radius:12px;max-height:240px;overflow-y:auto;overflow-x:hidden;"></div>
       </div>
 
       <div class="hint">Astuce: changez la langue en haut (FR/EN) pour éditer l’autre version.</div>
+      <div style="margin-top:8px;border-top:1px solid var(--border);"></div>
+      <div id="preview" style="margin-top:12px;display:none;">
+        <div class="row">
+          <div class="field">
+            <label>Prévisualisation – Objet (${lang.toUpperCase()})</label>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input id="pv-subject" readonly />
+              <button id="pv-copy-subject">Copier</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Remplacements de variables</label>
+            <div id="pv-vars" class="chips"></div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Prévisualisation – Corps (${lang.toUpperCase()})</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <textarea id="pv-body" readonly style="min-height:160px"></textarea>
+            <button id="pv-copy-body">Copier</button>
+          </div>
+        </div>
+      </div>
     `;
 
     // Wire handlers
@@ -392,12 +509,64 @@
       saveDraft();
     };
 
+    // If preview was active before rerender, rebuild preview contents
+    if (window._eaPreviewActive) buildPreview();
+
     const renderVars = () => {
       const auto = getAutoDetect();
       const detected = extractPlaceholdersFromTemplate(t);
       if (auto) {
         t.variables = detected.slice();
         saveDraft();
+      }
+      // Missing in library block
+      const missing = detected.filter(v => !data.variables || !data.variables[v]);
+      const missingBox = document.getElementById('vars-missing');
+      if (missingBox) {
+        if (!missing.length) {
+          missingBox.innerHTML = '';
+        } else {
+          missingBox.innerHTML = `
+            <div class="warn" style="display:flex;flex-direction:column;gap:8px;">
+              <div><strong>${missing.length}</strong> variable(s) utilisée(s) dans ce modèle ne sont pas dans la bibliothèque.</div>
+              <div class="chips">
+                ${missing.map(m => `<span class="chip">${escapeHtml(m)} <button data-add-missing="${escapeAttr(m)}" title="Ajouter à la bibliothèque">+</button></span>`).join('')}
+              </div>
+              <div><button id="btn-add-all-missing" class="primary">Tout ajouter à la bibliothèque</button></div>
+            </div>`;
+          // Wire individual add buttons
+          $$('#vars-missing [data-add-missing]').forEach(btn => {
+            btn.onclick = () => {
+              const key = btn.getAttribute('data-add-missing');
+              if (!key) return;
+              if (!data.variables) data.variables = {};
+              if (!data.variables[key]) data.variables[key] = inferVariableMeta(key);
+              saveDraft();
+              updateKpis();
+              renderVars();
+              renderVariablesEditor();
+              renderWarnings();
+              notify(`Variable « ${key} » ajoutée à la bibliothèque.`);
+            };
+          });
+          // Wire add all
+          const addAll = document.getElementById('btn-add-all-missing');
+          if (addAll) addAll.onclick = () => {
+            if (!data.variables) data.variables = {};
+            let count = 0;
+            missing.forEach(k => {
+              if (!data.variables[k]) { data.variables[k] = inferVariableMeta(k); count++; }
+            });
+            if (count > 0) {
+              saveDraft();
+              updateKpis();
+              renderVars();
+              renderVariablesEditor();
+              renderWarnings();
+              notify(`${count} variable(s) ajoutée(s) à la bibliothèque.`);
+            }
+          };
+        }
       }
       const term = ($('#vars-filter')?.value || '').trim().toLowerCase();
       const source = auto ? detected : allVars;
@@ -502,6 +671,64 @@
       selectedTemplateId = data.templates[0]?.id || null;
       saveDraft();
       afterDataLoad();
+    };
+
+    function buildPreview() {
+      const pv = document.getElementById('preview');
+      if (!pv) return;
+      pv.style.display = '';
+      window._eaPreviewActive = true;
+      const vars = Array.from(new Set([...(t.variables||[]), ...extractPlaceholdersFromTemplate(t)]));
+      const pvVars = document.getElementById('pv-vars');
+      pvVars.innerHTML = '';
+      const values = {};
+      vars.forEach(name => {
+        const wrap = document.createElement('div');
+        wrap.className = 'chip';
+        wrap.style.display = 'inline-flex';
+        wrap.style.alignItems = 'center';
+        wrap.style.gap = '6px';
+        const label = document.createElement('span');
+        label.textContent = name;
+        const input = document.createElement('input');
+        input.placeholder = (data.variables && data.variables[name] && data.variables[name].example) || '';
+        input.style.border = '1px solid var(--border)';
+        input.style.borderRadius = '10px';
+        input.style.padding = '4px 6px';
+        input.oninput = () => { values[name] = input.value; updatePreview(); };
+        wrap.appendChild(label);
+        wrap.appendChild(input);
+        pvVars.appendChild(wrap);
+      });
+      function replacePlaceholders(txt) {
+        return String(txt||'').replace(/<<([^>]+)>>/g, (m, g1) => {
+          return (values[g1] !== undefined ? values[g1] : (data.variables && data.variables[g1] && data.variables[g1].example) || m);
+        });
+      }
+      function updatePreview() {
+        const subj = replacePlaceholders((t.subject && t.subject[lang]) || '');
+        const body = replacePlaceholders((t.body && t.body[lang]) || '');
+        const ps = document.getElementById('pv-subject');
+        const pb = document.getElementById('pv-body');
+        if (ps) ps.value = subj;
+        if (pb) pb.value = body;
+      }
+      updatePreview();
+      const c1 = document.getElementById('pv-copy-subject');
+      if (c1) c1.onclick = () => { const v = document.getElementById('pv-subject')?.value || ''; navigator.clipboard && navigator.clipboard.writeText(v); notify('Objet copié.'); };
+      const c2 = document.getElementById('pv-copy-body');
+      if (c2) c2.onclick = () => { const v = document.getElementById('pv-body')?.value || ''; navigator.clipboard && navigator.clipboard.writeText(v); notify('Corps copié.'); };
+    }
+
+    if (btnPreview) btnPreview.onclick = () => {
+      const pv = document.getElementById('preview');
+      if (!pv) return;
+      if (pv.style.display === 'none' || pv.style.display === '') {
+        buildPreview();
+      } else {
+        pv.style.display = 'none';
+        window._eaPreviewActive = false;
+      }
     };
   }
 
@@ -860,7 +1087,9 @@
     data.metadata.totalTemplates = data.templates.length;
     const issues = validateData();
     if (issues.length) {
-      if (!confirm(`Des avertissements existent (${issues.length}). Exporter quand même ?`)) return;
+      const detail = issues.slice(0, 10).map((i, idx) => `${idx+1}. ${i}`).join('\n');
+      const more = issues.length > 10 ? `\n...et ${issues.length-10} autres.` : '';
+      if (!confirm(`Des avertissements existent (${issues.length}).\n\n${detail}${more}\n\nExporter quand même ?`)) return;
     }
     const pretty = JSON.stringify(data, null, 2);
     download('complete_email_templates.json', pretty);
@@ -913,6 +1142,8 @@
 
   langSwitch.onchange = (e) => {
     lang = e.target.value;
+    try { localStorage.setItem('ea_admin_lang', lang); } catch {}
+    renderSidebar();
     renderMain();
   };
 
