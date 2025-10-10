@@ -1152,12 +1152,66 @@
 
   btnHelp.onclick = () => {
     alert(
-`Conseils:
-• Importer JSON: Charge un fichier local dans le brouillon (aucune modification serveur).
-• Enregistrer le brouillon: Sauvegarde vos modifications dans votre navigateur.
-• Exporter JSON: Télécharge un fichier complet que vous pourrez committer à la place de complete_email_templates.json.
-• Les placeholders doivent être de la forme <<NomVariable>> et exister dans l’onglet Variables.
-• Astuce: changez FR/EN pour éditer les champs localisés.`
+`Aide – Console d’administration
+
+1) Vue d’ensemble
+• Barre latérale: liste des modèles avec recherche et filtre par catégorie.
+• Onglets: Templates / Variables / Métadonnées.
+• Barre d’outils: Dupliquer, Supprimer, Prévisualiser, Enregistrer le brouillon.
+
+2) Langues (FR/EN)
+• Utilisez le commutateur FR/EN en haut à droite pour éditer les champs localisés.
+• Le choix est mémorisé dans votre navigateur.
+
+3) Import / Export / Brouillon
+• Importer JSON: charge un fichier local dans le brouillon (aucune écriture serveur).
+• Import (lot): importe en masse (CSV / JSON / NDJSON). Les ID uniques sont générés si absents; les nouvelles catégories sont ajoutées; les placeholders <<NomVariable>> sont auto-détectés et ajoutés aux variables du modèle; les variables manquantes sont ajoutées à la bibliothèque avec un format suggéré.
+• Exporter JSON: télécharge un fichier complet (remplacez ensuite complete_email_templates.json si souhaité).
+• Enregistrer le brouillon: force la sauvegarde locale immédiate.
+• Réinitialiser: efface le brouillon local et recharge le fichier original.
+
+4) Convertir un .docx (Word) en JSON d’import (optionnel)
+• Placez le fichier .docx dans le dossier imports/ et exécutez le convertisseur (ligne de commande):
+  npm run convert:docx -- imports/monclient.docx > imports/monclient.json
+• Le convertisseur reconnaît: titres (H1–H6), “EN – Subject:”, “EN – Message body:”, “FR – Objet:”, “FR – Corps:”, et “Category: …”.
+
+5) Édition de templates
+• Champs: ID (unique), Catégorie, Titre, Description, Objet, Corps (selon la langue active).
+• Variables utilisées: 
+  – Auto-détecter: synchronise automatiquement depuis les placeholders <<NomVariable>> trouvés dans Objet/Corps.
+  – Détecter maintenant: ajoute les placeholders trouvés sans activer l’auto-sync.
+  – Tout / Aucun: sélectionne ou désélectionne en masse (mode manuel uniquement).
+  – Bloc “manquantes”: ajoutez les variables utilisées mais absentes de la bibliothèque.
+• Prévisualiser: remplacez les variables par des valeurs d’exemple, copiez Objet/Corps.
+• Dupliquer / Supprimer: actions sur le modèle courant.
+
+6) Variables (bibliothèque)
+• Ajouter/éditer: descriptions FR/EN, format (text/number/date/time), exemple.
+• Renommer: met à jour les références dans tous les templates (variables et placeholders <<...>>).
+• Supprimer: enlève la variable et la retire des listes de modèles.
+• Nettoyer: bouton “Supprimer les variables inutilisées” pour retirer celles non référencées par aucun modèle.
+
+7) Métadonnées (catégories)
+• Ajouter, Renommer (propagation vers les modèles), Supprimer, Réordonner.
+• Le filtre latéral est alimenté par ces catégories.
+
+8) Sélection multiple (barre latérale)
+• Activez “Sélection multiple” pour cocher plusieurs modèles.
+• Outils: Tout sélectionner, Effacer, Appliquer une catégorie en masse.
+
+9) Navigation & accessibilité
+• Clavier (liste): ↑/↓ pour changer de sélection, Entrée pour ouvrir; l’élément actif est auto-défilé en vue.
+• Mise au point visible et tuile active mise en évidence.
+
+10) Avertissements
+• Panneau épinglable (affiché en haut), bouton Afficher/Masquer.
+• Liste les incohérences (ID en double, catégories inconnues, placeholders manquants, etc.).
+• L’export est possible malgré des avertissements (confirmation affichée).
+
+Bonnes pratiques
+• Placeholders: utilisez <<NomVariable>> (respectez la casse), et décrivez-les dans l’onglet Variables.
+• ID de modèle: lettres/chiffres/underscore; doit être unique.
+• Sauvegardes: le brouillon est local (navigateur). Exportez pour partager/committer.`
     );
   };
 
