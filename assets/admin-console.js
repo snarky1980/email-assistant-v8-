@@ -767,6 +767,13 @@
   function renderVariablesEditor() {
     const vars = data.variables || {};
     const keys = Object.keys(vars).sort();
+    // Compute variables used across all templates (via placeholders and explicit t.variables)
+    const used = new Set();
+    (data.templates || []).forEach(t => {
+      extractPlaceholdersFromTemplate(t).forEach(v => used.add(v));
+      if (Array.isArray(t.variables)) t.variables.forEach(v => used.add(v));
+    });
+    const unusedKeys = keys.filter(k => !used.has(k));
 
     viewVariables.innerHTML = `
       <div class="row-3">
@@ -786,6 +793,11 @@
         <div class="field"><label>Description EN</label><input id="var-new-desc-en" /></div>
       </div>
       <div><button id="btn-add-var" class="primary">Ajouter</button></div>
+
+      <div style="margin-top:12px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <span class="hint">Variables inutilisées: <strong>${unusedKeys.length}</strong></span>
+        <button id="btn-clean-unused" ${unusedKeys.length ? '' : 'disabled'}>Supprimer les variables inutilisées</button>
+      </div>
 
       <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;"></div>
 
@@ -845,6 +857,20 @@
       renderTemplateEditor();
       renderWarnings();
       updateKpis();
+    };
+
+    // Cleanup unused variables
+    const cleanBtn = document.getElementById('btn-clean-unused');
+    if (cleanBtn) cleanBtn.onclick = () => {
+      if (!unusedKeys.length) return;
+      if (!confirm(`Supprimer ${unusedKeys.length} variable(s) non utilisées ?`)) return;
+      unusedKeys.forEach(k => { delete data.variables[k]; });
+      saveDraft();
+      updateKpis();
+      renderVariablesEditor();
+      renderTemplateEditor();
+      renderWarnings();
+      notify(`${unusedKeys.length} variable(s) supprimée(s).`);
     };
 
     // edits
