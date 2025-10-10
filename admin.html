@@ -125,12 +125,18 @@
     <div class="container">
       <!-- Sidebar: templates list -->
       <aside class="panel" id="sidebar">
-        <div class="head"><strong>Modèles</strong><button id="btn-new-template" class="primary">Nouveau</button></div>
+        <div class="head"><strong>Modèles</strong>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <button id="btn-bulk-import">Import (lot)</button>
+            <button id="btn-new-template" class="primary">Nouveau</button>
+          </div>
+        </div>
         <div class="body">
           <div class="search">
             <input id="search" placeholder="Rechercher…" />
             <select id="filter-category"><option value="all">Toutes</option></select>
           </div>
+          <input id="bulk-file" class="hidden-input" type="file" accept=".csv,.json,.ndjson,application/json,text/csv,text/plain" />
           <div class="list" id="template-list"></div>
         </div>
       </aside>

@@ -30,9 +30,11 @@
   const btnHelp = $('#btn-help');
 
   const btnNewTemplate = $('#btn-new-template');
+  const btnBulkImport = $('#btn-bulk-import');
   const searchInput = $('#search');
   const catFilterSel = $('#filter-category');
   const tplList = $('#template-list');
+  const bulkFileInput = $('#bulk-file');
 
   const tabTemplates = $('#tab-templates');
   const tabVariables = $('#tab-variables');
@@ -1128,6 +1130,165 @@
 • Astuce: changez FR/EN pour éditer les champs localisés.`
     );
   };
+
+  // Bulk import (CSV / JSON array / NDJSON) for many templates
+  if (btnBulkImport && bulkFileInput) {
+    btnBulkImport.onclick = () => bulkFileInput.click();
+    bulkFileInput.onchange = async (e) => {
+      const f = e.target.files?.[0];
+      if (!f) return;
+      try {
+        const txt = await f.text();
+        const ext = (f.name.split('.').pop() || '').toLowerCase();
+        const items = parseBulkTemplates(txt, ext);
+        if (!Array.isArray(items) || !items.length) { notify('Aucun template détecté dans le fichier.', 'warn'); return; }
+        const added = mergeImportedTemplates(items);
+        if (added > 0) {
+          saveDraft();
+          afterDataLoad();
+          notify(`${added} modèle(s) importé(s).`);
+        } else {
+          notify('Aucun modèle ajouté (doublons potentiels).', 'warn');
+        }
+      } catch (err) {
+        console.error(err);
+        notify('Import en lot échoué: format non reconnu ou contenu invalide.', 'warn');
+      } finally {
+        e.target.value = '';
+      }
+    };
+  }
+
+  function parseBulkTemplates(text, extHint) {
+    const t = text.trim();
+    if (!t) return [];
+    // Try JSON array
+    try {
+      if (t.startsWith('[')) {
+        const arr = JSON.parse(t);
+        if (Array.isArray(arr)) return arr.map(normalizeIncomingTemplate).filter(Boolean);
+      }
+    } catch {}
+    // Try NDJSON
+    const lines = t.split(/\r?\n/).filter(Boolean);
+    let ndjsonOk = true; const nd = [];
+    for (const line of lines) {
+      try { nd.push(normalizeIncomingTemplate(JSON.parse(line))); } catch { ndjsonOk = false; break; }
+    }
+    if (ndjsonOk && nd.length) return nd.filter(Boolean);
+    // Fallback: CSV
+    return parseCsvTemplates(t).map(normalizeIncomingTemplate).filter(Boolean);
+  }
+
+  function parseCsvTemplates(csvText) {
+    // Simple CSV parser for comma or semicolon separators with header
+    // Expected headers (case-insensitive): id, category, title_fr, title_en, description_fr, description_en, subject_fr, subject_en, body_fr, body_en
+    const rows = [];
+    const lines = csvText.split(/\r?\n/);
+    if (!lines.length) return rows;
+    const header = lines.shift();
+    if (!header) return rows;
+    const sep = header.includes(';') && !header.includes(',') ? ';' : ',';
+    const keys = header.split(sep).map(s => s.trim().toLowerCase());
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const cells = splitCsvLine(line, sep);
+      const obj = {};
+      keys.forEach((k, i) => obj[k] = cells[i] ?? '');
+      rows.push(obj);
+    }
+    return rows;
+  }
+
+  function splitCsvLine(line, sep) {
+    const out = [];
+    let cur = '';
+    let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (inQ && line[i+1] === '"') { cur += '"'; i++; }
+        else inQ = !inQ;
+      } else if (ch === sep && !inQ) {
+        out.push(cur); cur = '';
+      } else {
+        cur += ch;
+      }
+    }
+    out.push(cur);
+    return out.map(s => s.trim());
+  }
+
+  function normalizeIncomingTemplate(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    // Support multiple field names, map into our schema
+    const id = sanitizeId(raw.id || raw.ID || raw.slug || raw.key || '');
+    const category = String(raw.category || raw.categorie || raw.cat || '').trim();
+    const title_fr = (raw.title_fr ?? raw.titre_fr ?? raw.titleFR ?? raw.titleFr ?? raw.title?.fr) || '';
+    const title_en = (raw.title_en ?? raw.titre_en ?? raw.titleEN ?? raw.titleEn ?? raw.title?.en) || '';
+    const desc_fr = (raw.description_fr ?? raw.desc_fr ?? raw.descriptionFR ?? raw.descriptionFr ?? raw.description?.fr) || '';
+    const desc_en = (raw.description_en ?? raw.desc_en ?? raw.descriptionEN ?? raw.descriptionEn ?? raw.description?.en) || '';
+    const subj_fr = (raw.subject_fr ?? raw.objet_fr ?? raw.subjectFR ?? raw.subjectFr ?? raw.subject?.fr) || '';
+    const subj_en = (raw.subject_en ?? raw.objet_en ?? raw.subjectEN ?? raw.subjectEn ?? raw.subject?.en) || '';
+    const body_fr = (raw.body_fr ?? raw.corps_fr ?? raw.bodyFR ?? raw.bodyFr ?? raw.body?.fr) || '';
+    const body_en = (raw.body_en ?? raw.corps_en ?? raw.bodyEN ?? raw.bodyEn ?? raw.body?.en) || '';
+    const variables = Array.isArray(raw.variables) ? raw.variables.slice() : undefined;
+    return {
+      id: id || undefined,
+      category,
+      title: { fr: String(title_fr), en: String(title_en) },
+      description: { fr: String(desc_fr), en: String(desc_en) },
+      subject: { fr: String(subj_fr), en: String(subj_en) },
+      body: { fr: String(body_fr), en: String(body_en) },
+      variables,
+    };
+  }
+
+  function sanitizeId(s) {
+    const v = String(s || '').trim();
+    if (!v) return '';
+    return v.replace(/[^A-Za-z0-9_]+/g, '_');
+  }
+
+  function mergeImportedTemplates(items) {
+    let added = 0;
+    const cats = new Set(data.metadata.categories || []);
+    items.forEach(src => {
+      if (!src) return;
+      // Generate ID from title if missing
+      let id = src.id || sanitizeId(src.title?.fr || src.title?.en || 'modele');
+      if (!id) id = 'modele';
+      id = uniqueId(id);
+      const t = {
+        id,
+        category: src.category || '',
+        title: { fr: src.title?.fr || '', en: src.title?.en || '' },
+        description: { fr: src.description?.fr || '', en: src.description?.en || '' },
+        subject: { fr: src.subject?.fr || '', en: src.subject?.en || '' },
+        body: { fr: src.body?.fr || '', en: src.body?.en || '' },
+        variables: Array.isArray(src.variables) ? Array.from(new Set(src.variables)) : [],
+      };
+      // Add category if new
+      if (t.category && !cats.has(t.category)) {
+        cats.add(t.category);
+      }
+      // Auto-detect placeholders and union with provided variables
+      const ph = extractPlaceholdersFromTemplate(t);
+      t.variables = Array.from(new Set([...(t.variables || []), ...ph]));
+      data.templates.push(t);
+      added++;
+    });
+    // Update categories in metadata
+    data.metadata.categories = Array.from(cats);
+    // Optionally add missing variables to library with inferred meta
+    const lib = data.variables || (data.variables = {});
+    const allPlaceholders = new Set();
+    data.templates.forEach(t => (t.variables || []).forEach(v => allPlaceholders.add(v)));
+    for (const v of allPlaceholders) {
+      if (!lib[v]) lib[v] = inferVariableMeta(v);
+    }
+    return added;
+  }
 
   // Sidebar/search/filter
   btnNewTemplate.onclick = () => {
