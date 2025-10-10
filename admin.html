@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Email Assistant – Admin Console</title>
+  <meta name="robots" content="noindex, nofollow" />
   <link rel="icon" href="/favicon.ico" />
     <meta name="description" content="Admin console to manage email templates and variables." />
     <style>
@@ -167,6 +168,22 @@
         </div>
       </main>
     </div>
+
+        <!-- Lightweight modal for previews -->
+        <div id="modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.35); z-index:1000; align-items:center; justify-content:center;">
+          <div id="modal-card" style="background:white; border:1px solid var(--border); border-radius:12px; box-shadow:0 10px 40px rgba(2,6,23,0.2); width:min(640px, 92vw); max-height:80vh; display:flex; flex-direction:column;">
+            <div style="padding:12px 14px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
+              <strong id="modal-title">Aperçu</strong>
+              <button id="modal-close" aria-label="Fermer">✕</button>
+            </div>
+            <div id="modal-body" style="padding:12px; overflow:auto;">
+            </div>
+            <div id="modal-actions" style="padding:12px; border-top:1px solid var(--border); display:flex; gap:8px; justify-content:flex-end;">
+              <button id="modal-cancel">Annuler</button>
+              <button id="modal-confirm" class="primary">Confirmer</button>
+            </div>
+          </div>
+        </div>
 
     <script src="./assets/admin-console.js"></script>
   </body>

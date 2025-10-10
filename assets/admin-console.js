@@ -21,6 +21,13 @@
   const kpiVariables = $('#kpi-variables');
   const warningsEl = $('#warnings');
   const noticeEl = $('#notice');
+  // Modal elements (for previews/confirmations)
+  const modal = $('#modal');
+  const modalTitle = $('#modal-title');
+  const modalBody = $('#modal-body');
+  const modalConfirm = $('#modal-confirm');
+  const modalCancel = $('#modal-cancel');
+  const modalClose = $('#modal-close');
 
   const langSwitch = $('#lang-switch');
   const fileInput = $('#file-input');
@@ -75,6 +82,18 @@
       console.error(e);
     }
   }, 400);
+
+  function showModal({ title, bodyHtml, confirmText = 'Confirmer', onConfirm }) {
+    if (!modal) { alert('' + (bodyHtml?.replace?.(/<[^>]+>/g, '') || '')); if (onConfirm) onConfirm(); return; }
+    modalTitle.textContent = title || 'Aperçu';
+    modalBody.innerHTML = bodyHtml || '';
+    if (modalConfirm) modalConfirm.textContent = confirmText;
+    const close = () => { modal.style.display = 'none'; modalConfirm.onclick = null; };
+    if (modalCancel) modalCancel.onclick = close;
+    if (modalClose) modalClose.onclick = close;
+    if (modalConfirm) modalConfirm.onclick = () => { try { onConfirm && onConfirm(); } finally { close(); } };
+    modal.style.display = 'flex';
+  }
 
   // Ephemeral notification (does not hide persistent warnings)
   const notify = (msg, type = 'info') => {
@@ -863,14 +882,24 @@
     const cleanBtn = document.getElementById('btn-clean-unused');
     if (cleanBtn) cleanBtn.onclick = () => {
       if (!unusedKeys.length) return;
-      if (!confirm(`Supprimer ${unusedKeys.length} variable(s) non utilisées ?`)) return;
-      unusedKeys.forEach(k => { delete data.variables[k]; });
-      saveDraft();
-      updateKpis();
-      renderVariablesEditor();
-      renderTemplateEditor();
-      renderWarnings();
-      notify(`${unusedKeys.length} variable(s) supprimée(s).`);
+      const listHtml = `<div class="hint" style="margin-bottom:8px;">Les variables suivantes seront supprimées (${unusedKeys.length}) :</div>
+        <div style="border:1px solid var(--border); border-radius:10px; padding:8px; max-height:40vh; overflow:auto;">
+          <ul style="margin:0 0 0 18px;">${unusedKeys.map(k => `<li>${escapeHtml(k)}</li>`).join('')}</ul>
+        </div>`;
+      showModal({
+        title: 'Supprimer les variables inutilisées',
+        bodyHtml: listHtml,
+        confirmText: 'Supprimer',
+        onConfirm: () => {
+          unusedKeys.forEach(k => { delete data.variables[k]; });
+          saveDraft();
+          updateKpis();
+          renderVariablesEditor();
+          renderTemplateEditor();
+          renderWarnings();
+          notify(`${unusedKeys.length} variable(s) supprimée(s).`);
+        }
+      });
     };
 
     // edits
@@ -1151,69 +1180,99 @@
   };
 
   btnHelp.onclick = () => {
-    alert(
-`Aide – Console d’administration
-
-1) Vue d’ensemble
-• Barre latérale: liste des modèles avec recherche et filtre par catégorie.
-• Onglets: Templates / Variables / Métadonnées.
-• Barre d’outils: Dupliquer, Supprimer, Prévisualiser, Enregistrer le brouillon.
-
-2) Langues (FR/EN)
-• Utilisez le commutateur FR/EN en haut à droite pour éditer les champs localisés.
-• Le choix est mémorisé dans votre navigateur.
-
-3) Import / Export / Brouillon
-• Importer JSON: charge un fichier local dans le brouillon (aucune écriture serveur).
-• Import (lot): importe en masse (CSV / JSON / NDJSON). Les ID uniques sont générés si absents; les nouvelles catégories sont ajoutées; les placeholders <<NomVariable>> sont auto-détectés et ajoutés aux variables du modèle; les variables manquantes sont ajoutées à la bibliothèque avec un format suggéré.
-• Exporter JSON: télécharge un fichier complet (remplacez ensuite complete_email_templates.json si souhaité).
-• Enregistrer le brouillon: force la sauvegarde locale immédiate.
-• Réinitialiser: efface le brouillon local et recharge le fichier original.
-
-4) Convertir un .docx (Word) en JSON d’import (optionnel)
-• Placez le fichier .docx dans le dossier imports/ et exécutez le convertisseur (ligne de commande):
-  npm run convert:docx -- imports/monclient.docx > imports/monclient.json
-• Le convertisseur reconnaît: titres (H1–H6), “EN – Subject:”, “EN – Message body:”, “FR – Objet:”, “FR – Corps:”, et “Category: …”.
-
-5) Édition de templates
-• Champs: ID (unique), Catégorie, Titre, Description, Objet, Corps (selon la langue active).
-• Variables utilisées: 
-  – Auto-détecter: synchronise automatiquement depuis les placeholders <<NomVariable>> trouvés dans Objet/Corps.
-  – Détecter maintenant: ajoute les placeholders trouvés sans activer l’auto-sync.
-  – Tout / Aucun: sélectionne ou désélectionne en masse (mode manuel uniquement).
-  – Bloc “manquantes”: ajoutez les variables utilisées mais absentes de la bibliothèque.
-• Prévisualiser: remplacez les variables par des valeurs d’exemple, copiez Objet/Corps.
-• Dupliquer / Supprimer: actions sur le modèle courant.
-
-6) Variables (bibliothèque)
-• Ajouter/éditer: descriptions FR/EN, format (text/number/date/time), exemple.
-• Renommer: met à jour les références dans tous les templates (variables et placeholders <<...>>).
-• Supprimer: enlève la variable et la retire des listes de modèles.
-• Nettoyer: bouton “Supprimer les variables inutilisées” pour retirer celles non référencées par aucun modèle.
-
-7) Métadonnées (catégories)
-• Ajouter, Renommer (propagation vers les modèles), Supprimer, Réordonner.
-• Le filtre latéral est alimenté par ces catégories.
-
-8) Sélection multiple (barre latérale)
-• Activez “Sélection multiple” pour cocher plusieurs modèles.
-• Outils: Tout sélectionner, Effacer, Appliquer une catégorie en masse.
-
-9) Navigation & accessibilité
-• Clavier (liste): ↑/↓ pour changer de sélection, Entrée pour ouvrir; l’élément actif est auto-défilé en vue.
-• Mise au point visible et tuile active mise en évidence.
-
-10) Avertissements
-• Panneau épinglable (affiché en haut), bouton Afficher/Masquer.
-• Liste les incohérences (ID en double, catégories inconnues, placeholders manquants, etc.).
-• L’export est possible malgré des avertissements (confirmation affichée).
-
-Bonnes pratiques
-• Placeholders: utilisez <<NomVariable>> (respectez la casse), et décrivez-les dans l’onglet Variables.
-• ID de modèle: lettres/chiffres/underscore; doit être unique.
-• Sauvegardes: le brouillon est local (navigateur). Exportez pour partager/committer.`
-    );
+    try { window.open('./help.html', '_blank', 'noopener'); } catch {}
+    const code = (s) => `<pre style="background:#0b1020;color:#e5e7eb;padding:10px;border-radius:10px;overflow:auto;"><code>${escapeHtml(s)}</code></pre>`;
+    const copyBtn = (s) => `<button data-copy="${escapeAttr(s)}" style="margin-top:6px;">Copier</button>`;
+    const body = `
+      <div style="display:grid; gap:12px;">
+        <section>
+          <div class="hint" style="font-weight:800;color:#334155">1) Vue d’ensemble</div>
+          <ul style="margin:6px 0 0 18px;">
+            <li>Barre latérale: liste des modèles avec recherche et filtre par catégorie.</li>
+            <li>Onglets: Templates / Variables / Métadonnées.</li>
+            <li>Barre d’outils: Dupliquer, Supprimer, Prévisualiser, Enregistrer le brouillon.</li>
+          </ul>
+        </section>
+        <section>
+          <div class="hint" style="font-weight:800;color:#334155">2) Langues (FR/EN)</div>
+          <ul style="margin:6px 0 0 18px;">
+            <li>Utilisez le commutateur FR/EN pour éditer les champs localisés.</li>
+            <li>Le choix est mémorisé localement.</li>
+          </ul>
+        </section>
+        <section>
+          <div class="hint" style="font-weight:800;color:#334155">3) Import / Export / Brouillon</div>
+          <ul style="margin:6px 0 0 18px;">
+            <li>Importer JSON: charge un fichier local dans le brouillon (aucune écriture serveur).</li>
+            <li>Import (lot): CSV / JSON / NDJSON. Colonne Variables/Vars acceptée (séparateurs ; ou ,). ID auto, catégories ajoutées, placeholders <<NomVariable>> auto-détectés, variables manquantes ajoutées à la bibliothèque.</li>
+            <li>Exporter JSON: télécharge un fichier complet.</li>
+            <li>Enregistrer le brouillon / Réinitialiser disponibles en haut.</li>
+          </ul>
+        </section>
+        <section>
+          <div class="hint" style="font-weight:800;color:#334155">4) Convertir un .docx en JSON d’import</div>
+          <div>Placez le .docx dans imports/ puis exécutez:</div>
+          ${code('npm run convert:docx -- imports/monclient.docx > imports/monclient.json')}
+          ${copyBtn('npm run convert:docx -- imports/monclient.docx > imports/monclient.json')}
+          <div class="hint">Reconnaît: titres (H1–H6), “EN – Subject:”, “EN – Message body:”, “FR – Objet:”, “FR – Corps:”, et “Category: …”.</div>
+        </section>
+        <section>
+          <div class="hint" style="font-weight:800;color:#334155">5) Édition de templates</div>
+          <ul style="margin:6px 0 0 18px;">
+            <li>Champs: ID, Catégorie, Titre, Description, Objet, Corps selon la langue.</li>
+            <li>Variables utilisées: auto-détection, “Détecter maintenant”, Tout/Aucun (mode manuel), ajout des manquantes.</li>
+            <li>Prévisualiser: remplacements d’exemple et copier Objet/Corps.</li>
+          </ul>
+        </section>
+        <section>
+          <div class="hint" style="font-weight:800;color:#334155">6) Variables (bibliothèque)</div>
+          <ul style="margin:6px 0 0 18px;">
+            <li>Ajouter/éditer: descriptions FR/EN, format, exemple.</li>
+            <li>Renommer: met à jour les références et placeholders.</li>
+            <li>Supprimer: enlève la variable et la retire des modèles.</li>
+            <li>Nettoyer: aperçu des variables inutilisées puis suppression confirmée.</li>
+          </ul>
+        </section>
+        <section>
+          <div class="hint" style="font-weight:800;color:#334155">7) Métadonnées (catégories)</div>
+          <div>Ajouter, Renommer (propagation), Supprimer, Réordonner. Alimente le filtre.
+          </div>
+        </section>
+        <section>
+          <div class="hint" style="font-weight:800;color:#334155">8) Sélection multiple</div>
+          <div>Tout sélectionner / Effacer, appliquer une catégorie en masse.</div>
+        </section>
+        <section>
+          <div class="hint" style="font-weight:800;color:#334155">9) Navigation & accessibilité</div>
+          <div>↑/↓ pour naviguer la liste, Entrée pour ouvrir; défilement automatique sur l’élément actif.</div>
+        </section>
+        <section>
+          <div class="hint" style="font-weight:800;color:#334155">10) Avertissements</div>
+          <div>Panneau épinglable; incohérences listées; export possible avec confirmation.</div>
+        </section>
+        <section>
+          <div class="hint" style="font-weight:800;color:#334155">Bonnes pratiques</div>
+          <ul style="margin:6px 0 0 18px;">
+            <li>Placeholders: utilisez <<NomVariable>> et documentez-les.</li>
+            <li>ID modèle: lettres/chiffres/_ et unique.</li>
+            <li>Le brouillon est local; exportez pour partager et versionner.</li>
+          </ul>
+        </section>
+      </div>`;
+    showModal({ title: 'Aide – Console d’administration', bodyHtml: body, confirmText: 'Fermer', onConfirm: () => {} });
   };
+
+  // Delegated copy handler for modal content
+  if (modal) {
+    modal.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-copy]');
+      if (!btn) return;
+      const txt = btn.getAttribute('data-copy') || '';
+      if (!txt) return;
+      navigator.clipboard && navigator.clipboard.writeText(txt);
+      notify('Commande copiée.');
+    });
+  }
 
   // Bulk import (CSV / JSON array / NDJSON) for many templates
   if (btnBulkImport && bulkFileInput) {
@@ -1316,7 +1375,12 @@ Bonnes pratiques
     const subj_en = (raw.subject_en ?? raw.objet_en ?? raw.subjectEN ?? raw.subjectEn ?? raw.subject?.en) || '';
     const body_fr = (raw.body_fr ?? raw.corps_fr ?? raw.bodyFR ?? raw.bodyFr ?? raw.body?.fr) || '';
     const body_en = (raw.body_en ?? raw.corps_en ?? raw.bodyEN ?? raw.bodyEn ?? raw.body?.en) || '';
-    const variables = Array.isArray(raw.variables) ? raw.variables.slice() : undefined;
+    let variables = Array.isArray(raw.variables) ? raw.variables.slice() : undefined;
+    // CSV support: a 'variables' or 'vars' column as a delimited string
+    const rawVars = raw.variables ?? raw.vars;
+    if (!variables && typeof rawVars === 'string') {
+      variables = rawVars.split(/[;,]/).map(s => s.trim()).filter(Boolean);
+    }
     return {
       id: id || undefined,
       category,
