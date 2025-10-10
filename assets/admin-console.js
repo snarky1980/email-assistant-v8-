@@ -129,7 +129,11 @@
     renderMain();
     updateKpis();
     renderWarnings();
-    if (langSwitch) langSwitch.value = lang;
+    // Sync segmented toggle buttons
+    if (langSwitch) {
+      const btns = $$('button[data-lang]', langSwitch);
+      btns.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
+    }
   }
 
   function updateKpis() {
@@ -1318,12 +1322,21 @@
     renderSidebar();
   };
 
-  langSwitch.onchange = (e) => {
-    lang = e.target.value;
-    try { localStorage.setItem('ea_admin_lang', lang); } catch {}
-    renderSidebar();
-    renderMain();
-  };
+  // Segmented toggle handler
+  if (langSwitch) {
+    langSwitch.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-lang]');
+      if (!btn) return;
+      const next = btn.dataset.lang;
+      if (!next || next === lang) return;
+      lang = next;
+      try { localStorage.setItem('ea_admin_lang', lang); } catch {}
+      const btns = $$('button[data-lang]', langSwitch);
+      btns.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
+      renderSidebar();
+      renderMain();
+    });
+  }
 
   // Keyboard navigation in sidebar: Up/Down to change selection, Enter to open
   document.addEventListener('keydown', (e) => {

@@ -45,7 +45,11 @@
       .topbar button.primary { background: var(--tb-teal); border-color: var(--tb-teal); color: white; }
       .topbar button.warning { background: #fff7ed; border-color: #fed7aa; color: #9a3412; }
       .topbar button.danger { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
-      .topbar select { border: 1px solid var(--border); background: var(--panel); padding: 8px 10px; border-radius: 10px; }
+  .topbar select { border: 1px solid var(--border); background: var(--panel); padding: 8px 10px; border-radius: 10px; }
+  /* Segmented toggle for FR/EN */
+  .seg-toggle { display:inline-flex; align-items:center; gap:4px; background:#f1f5f9; padding:4px; border-radius: 12px; border:1px solid var(--border); }
+  .seg-toggle button { border:none; background:transparent; padding:6px 10px; border-radius: 10px; font-weight: 800; color: var(--muted); cursor:pointer; }
+  .seg-toggle button[aria-pressed="true"] { background:white; color:#0f172a; box-shadow: 0 1px 0 rgba(0,0,0,0.02); }
       .hidden-input { display: none; }
 
       .container { display: grid; grid-template-columns: 320px 1fr; gap: 16px; padding: 16px; }
@@ -104,10 +108,10 @@
         <span id="kpi-variables" class="badge">0 variables</span>
       </div>
       <div class="spacer"></div>
-      <select id="lang-switch">
-        <option value="fr">FR</option>
-        <option value="en">EN</option>
-      </select>
+      <div id="lang-switch" class="seg-toggle" role="group" aria-label="Language">
+        <button type="button" data-lang="fr" aria-pressed="false">FR</button>
+        <button type="button" data-lang="en" aria-pressed="false">EN</button>
+      </div>
       <button id="btn-import">Importer JSON</button>
       <label for="file-input" class="btn" style="cursor:pointer;">Choisir un fichier…</label>
       <input id="file-input" class="hidden-input" type="file" accept="application/json" />
