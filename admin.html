@@ -58,8 +58,10 @@
 
       .list { display: grid; gap: 8px; margin-top: 12px; max-height: calc(100vh - 240px); overflow: auto; }
       .tile { border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: grid; gap: 6px; cursor: pointer; background: white; }
-      .tile:hover { border-color: #cbd5e1; }
+    .tile:hover { border-color: #cbd5e1; }
   .tile.active { border-color: var(--tb-teal); background: #ecfdf5; box-shadow: inset 0 0 0 2px rgba(16,185,129,0.15); }
+  /* Subtle left accent for active tile */
+  .tile.active::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; border-top-left-radius: 12px; border-bottom-left-radius: 12px; background: linear-gradient(180deg, var(--tb-teal-700), var(--tb-teal)); opacity: 0.9; }
   .tile:focus-visible { outline: 2px solid var(--tb-teal-500); outline-offset: 2px; }
       .tile .title { font-weight: 700; }
       .tile .meta { color: var(--muted); font-size: 12px; display: flex; gap: 8px; }

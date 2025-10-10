@@ -16,12 +16,12 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       host: '0.0.0.0',
-      port: 5173,
-      strictPort: false,
+      port: 5280,
+      strictPort: true,
       allowedHosts: ['all'],
     },
     preview: {
-      port: 5175,
+      port: 5281,
     },
   };
 });

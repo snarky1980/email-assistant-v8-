@@ -11,6 +11,8 @@
   let filterCategory = 'all';
   let bulkMode = false;
   let selectedTemplateIds = new Set();
+  // When true, the next sidebar render will focus and scroll the active tile into view
+  let _revealActiveOnRender = false;
 
   // DOM
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -117,6 +119,9 @@
   function afterDataLoad() {
     // Update computed metadata
     data.metadata.totalTemplates = data.templates.length;
+    if (!selectedTemplateId && data.templates.length) {
+      selectedTemplateId = data.templates[0].id;
+    }
     renderCategoryFilter();
     renderSidebar();
     renderMain();
@@ -255,6 +260,7 @@
       el.onclick = (e) => {
         if (bulkMode) return; // In bulk mode, clicking tiles won’t navigate
         selectedTemplateId = el.dataset.id;
+        _revealActiveOnRender = true;
         renderSidebar(); // refresh highlight
         renderMain();
       };
@@ -302,6 +308,17 @@
       renderWarnings();
       notify('Catégorie appliquée aux éléments sélectionnés.');
     };
+
+    // Optionally reveal the active tile after interactions like click/keyboard nav
+    if (_revealActiveOnRender) {
+      _revealActiveOnRender = false;
+      const activeEl = document.querySelector('#template-list .tile.active');
+      if (activeEl) {
+        // Keep focus within list for accessibility, then scroll to nearest
+        activeEl.focus({ preventScroll: true });
+        activeEl.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
+    }
   }
 
   function getFilteredTemplates() {
@@ -1146,6 +1163,34 @@
     renderSidebar();
     renderMain();
   };
+
+  // Keyboard navigation in sidebar: Up/Down to change selection, Enter to open
+  document.addEventListener('keydown', (e) => {
+    if (bulkMode) return; // disable nav in bulk mode
+    const ae = document.activeElement;
+    const withinList = ae && typeof ae.closest === 'function' && ae.closest('#template-list');
+    if (!withinList) return; // only when focus is inside the templates list
+
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const list = getFilteredTemplates();
+      if (!list.length) return;
+      let idx = list.findIndex(t => t.id === selectedTemplateId);
+      if (idx < 0) idx = 0;
+      if (e.key === 'ArrowDown') idx = (idx + 1) % list.length; else idx = (idx - 1 + list.length) % list.length;
+      selectedTemplateId = list[idx].id;
+      _revealActiveOnRender = true;
+      renderSidebar();
+      renderMain();
+    } else if (e.key === 'Enter') {
+      // Let tile handler manage Enter key; ensure we target the active tile if focus is on the list container
+      const targetTile = document.querySelector('#template-list .tile.active');
+      if (targetTile && ae === document.getElementById('template-list')) {
+        e.preventDefault();
+        targetTile.click();
+      }
+    }
+  });
 
   // Tabs
   function setTab(active) {
