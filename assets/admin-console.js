@@ -975,6 +975,9 @@
   function renderMetadataEditor() {
     const m = data.metadata || {};
     const cats = m.categories || [];
+    // Detect orphan (unused) categories
+    const usedCats = new Set((data.templates || []).map(t => t.category).filter(Boolean));
+    const orphanCats = cats.filter(c => !usedCats.has(c));
     viewMetadata.innerHTML = `
       <div class="row">
         <div class="field">
@@ -1008,6 +1011,10 @@
               </div>
             </div>
           `).join('') : `<div class="hint">Aucune catégorie. Ajoutez-en ci-dessous.</div>`}
+        </div>
+        <div style="margin-top:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <span class="hint">Catégories vides: <strong>${orphanCats.length}</strong></span>
+          <button id="cat-clean-orphans" ${orphanCats.length ? '' : 'disabled'}>Supprimer les catégories vides</button>
         </div>
         <div class="row">
           <div class="field"><input id="cat-new" placeholder="Ajouter une catégorie…" /></div>
@@ -1103,6 +1110,23 @@
         renderSidebar();
       };
     });
+
+    // Cleanup orphan categories handler
+    const btnClean = document.getElementById('cat-clean-orphans');
+    if (btnClean) btnClean.onclick = () => {
+      if (!orphanCats.length) return;
+      const names = orphanCats.join(', ');
+      if (!confirm(`Supprimer ${orphanCats.length} catégorie(s) sans modèle ?\n\n${names}`)) return;
+      m.categories = (m.categories || []).filter(c => !orphanCats.includes(c));
+      // Reset filter if pointing to a removed category
+      if (orphanCats.includes(filterCategory)) filterCategory = 'all';
+      saveDraft();
+      renderCategoryFilter();
+      renderMetadataEditor();
+      renderTemplateEditor();
+      renderSidebar();
+      notify(`${orphanCats.length} catégorie(s) supprimée(s).`);
+    };
   }
 
   function validateData() {
