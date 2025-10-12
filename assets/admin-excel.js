@@ -1,5 +1,5 @@
 // Assistant Excel: read .xlsx, normalize, validate, and export app-schema JSON
-import XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
+import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
 
 (function(){
   const $ = (sel, root=document) => root.querySelector(sel);
