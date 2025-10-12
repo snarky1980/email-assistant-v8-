@@ -10,6 +10,7 @@ import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
   const inpDefaultCat = $('#inp-default-cat');
   const btnParse = $('#btn-parse');
   const btnExport = $('#btn-export');
+  const btnImportAdmin = $('#btn-import-admin');
   const boxSummary = $('#summary');
   const boxWarn = $('#warnings');
   const boxErr = $('#errors');
@@ -329,6 +330,7 @@ import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
     // Save in memory for export
     window._excelAssistant = { templates, variables, client };
     btnExport.disabled = templates.length === 0;
+    if (btnImportAdmin) btnImportAdmin.disabled = templates.length === 0;
     notify('Analyse terminée.');
   }
 
@@ -363,6 +365,22 @@ import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
     notify('Échec de l’analyse', 'warn');
   }); };
   if (btnExport) btnExport.onclick = exportJson;
+  if (btnImportAdmin) btnImportAdmin.onclick = () => {
+    try {
+      const st = window._excelAssistant || { templates:[], variables:{}, client:'client' };
+      const obj = {
+        metadata: { version: '1.0', totalTemplates: st.templates.length, languages: ['fr','en'], categories: Array.from(new Set(st.templates.map(t=>t.category).filter(Boolean))) },
+        variables: st.variables,
+        templates: st.templates
+      };
+      localStorage.setItem('ea_admin_draft_v2', JSON.stringify(obj, null, 2));
+      // go to admin console
+      window.location.href = './admin.html';
+    } catch (e) {
+      console.error(e);
+      notify('Impossible d’importer dans la console.', 'warn');
+    }
+  };
   if (btnDlTpl) btnDlTpl.onclick = () => {
     // Build a tiny starter Excel in-memory via CSV fallback for simplicity
     const csv = [
