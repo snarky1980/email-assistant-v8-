@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
+import fs from 'fs'
 
 export default defineConfig(({ mode }) => {
   // Use GitHub Pages base only in production build; use root in dev to avoid nested path issues.
@@ -44,12 +45,53 @@ export default defineConfig(({ mode }) => {
       });
     }
   };
+  const copyAdminStaticPlugin = {
+    name: 'copy-admin-static',
+    apply: 'build',
+    writeBundle(options) {
+      const outDir = options.dir || 'dist';
+      const root = process.cwd();
+      const files = [
+        { src: path.resolve(root, 'admin.html'), dst: path.resolve(outDir, 'admin.html') },
+        { src: path.resolve(root, 'admin-excel.html'), dst: path.resolve(outDir, 'admin-excel.html') },
+        { src: path.resolve(root, 'help.html'), dst: path.resolve(outDir, 'help.html') },
+        { src: path.resolve(root, '404.html'), dst: path.resolve(outDir, '404.html') },
+      ];
+      const assets = [
+        { src: path.resolve(root, 'assets', 'admin-console.js'), dst: path.resolve(outDir, 'assets', 'admin-console.js') },
+        { src: path.resolve(root, 'assets', 'admin-excel.js'), dst: path.resolve(outDir, 'assets', 'admin-excel.js') },
+      ];
+      // ensure assets dir
+      fs.mkdirSync(path.resolve(outDir, 'assets'), { recursive: true });
+      for (const f of [...files, ...assets]) {
+        try {
+          if (fs.existsSync(f.src)) {
+            fs.copyFileSync(f.src, f.dst);
+          }
+        } catch (e) {
+          // non-fatal
+          console.warn('[copy-admin-static] failed to copy', f.src, '->', f.dst, e?.message || e);
+        }
+      }
+    }
+  };
   return {
     base,
-    plugins: [react(), tailwindcss(), ...(mode !== 'production' ? [writeTemplatesPlugin] : [])],
+    plugins: [react(), tailwindcss(), ...(mode !== 'production' ? [writeTemplatesPlugin] : []), copyAdminStaticPlugin],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
+      },
+    },
+    build: {
+      rollupOptions: {
+        input: {
+          main: path.resolve(process.cwd(), 'index.html'),
+          admin: path.resolve(process.cwd(), 'admin.html'),
+          adminExcel: path.resolve(process.cwd(), 'admin-excel.html'),
+          help: path.resolve(process.cwd(), 'help.html'),
+          notfound: path.resolve(process.cwd(), '404.html'),
+        },
       },
     },
     server: {
