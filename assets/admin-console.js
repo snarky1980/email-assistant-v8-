@@ -60,6 +60,8 @@
   let warnFilterActive = false;
   let warnTplIds = new Set();
 
+  function escapeReg(s){ return String(s).replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
+
   // Utils
   const debounce = (fn, ms = 300) => {
     let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
@@ -198,6 +200,8 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
           <button id="btn-fix-add-vars" title="Créer les variables manquantes d’après les placeholders">Ajouter variables manquantes</button>
           <button id="btn-fix-sync-vars" title="Lister tous les placeholders dans chaque template">Synchroniser variables des templates</button>
+          <button id="btn-orphan-add" title="Ajouter les placeholders orphelins au dictionnaire de variables">Ajouter placeholders orphelins</button>
+          <button id="btn-orphan-remove" title="Supprimer des textes tous les placeholders orphelins">Supprimer placeholders orphelins</button>
           <label style="display:flex;align-items:center;gap:6px;font-weight:600;color:#9a3412;margin-left:auto;">
             <input type="checkbox" id="warn-filter-toggle" ${warnFilterActive ? 'checked' : ''}> Voir uniquement les modèles avec avertissements
           </label>
@@ -226,6 +230,26 @@
       if (fixAdd) fixAdd.onclick = () => { quickFixAddMissingVariables(); saveDraft(); renderWarnings(); notify('Variables ajoutées à partir des placeholders.'); };
       const fixSync = document.getElementById('btn-fix-sync-vars');
       if (fixSync) fixSync.onclick = () => { quickFixSyncTemplateVariables(); saveDraft(); renderWarnings(); renderSidebar(); renderTemplateEditor(); notify('Variables des templates synchronisées.'); };
+      const orphanAdd = document.getElementById('btn-orphan-add');
+      if (orphanAdd) orphanAdd.onclick = () => {
+        const occ = computeOrphanPlaceholders();
+        const names = Array.from(occ.keys());
+        if (!names.length) { notify('Aucun placeholder orphelin détecté.'); return; }
+        const added = orphanAddToLibrary(occ);
+        quickFixSyncTemplateVariables();
+        saveDraft(); renderWarnings(); renderSidebar(); renderTemplateEditor();
+        notify(`${added} placeholder(s) ajoutés au dictionnaire.`);
+      };
+      const orphanRemove = document.getElementById('btn-orphan-remove');
+      if (orphanRemove) orphanRemove.onclick = () => {
+        const occ = computeOrphanPlaceholders();
+        const names = Array.from(occ.keys());
+        if (!names.length) { notify('Aucun placeholder orphelin détecté.'); return; }
+        if (!confirm(`Supprimer des textes ${names.length} placeholder(s) orphelin(s) ?\n\n${names.slice(0,8).join(', ')}${names.length>8?'…':''}`)) return;
+        const removed = orphanRemoveFromTexts(occ);
+        saveDraft(); renderWarnings(); renderSidebar(); renderTemplateEditor();
+        notify(`${removed} occurrence(s) supprimée(s).`);
+      };
       const warnTog = document.getElementById('warn-filter-toggle');
       if (warnTog) warnTog.onchange = () => { warnFilterActive = warnTog.checked; renderSidebar(); };
       // Jump handlers
@@ -310,6 +334,62 @@
       const current = Array.isArray(t.variables) ? t.variables : [];
       t.variables = Array.from(new Set([...(current||[]), ...ph]));
     });
+  }
+
+  function computeOrphanPlaceholders() {
+    // Orphan = appears in texts but NOT listed in template.variables OR missing from library? Here we choose: not listed in template.variables.
+    const occ = new Map(); // name -> { count, inTemplates: Set(ids) }
+    (data.templates || []).forEach(t => {
+      const ph = extractPlaceholdersFromTemplate(t);
+      const listed = new Set(Array.isArray(t.variables) ? t.variables : []);
+      ph.forEach(p => {
+        if (!listed.has(p)) {
+          const rec = occ.get(p) || { count:0, inTemplates:new Set() };
+          rec.count++; rec.inTemplates.add(t.id);
+          occ.set(p, rec);
+        }
+      });
+    });
+    return occ; // may include placeholders that are still present in variables library; this tool focuses on not-listed-in-template vars
+  }
+
+  function orphanAddToLibrary(orphanMap) {
+    const lib = data.variables || (data.variables = {});
+    let added = 0;
+    for (const name of orphanMap.keys()) {
+      if (!lib[name]) { lib[name] = inferVariableMeta(name); added++; }
+    }
+    return added;
+  }
+
+  function orphanRemoveFromTexts(orphanMap) {
+    let removed = 0;
+    (data.templates || []).forEach(t => {
+      // Build regex set for orphan names found in this template
+      const ph = extractPlaceholdersFromTemplate(t);
+      const listed = new Set(Array.isArray(t.variables) ? t.variables : []);
+      const toRemove = ph.filter(p => !listed.has(p) && orphanMap.has(p));
+      if (!toRemove.length) return;
+      const res = (txt) => {
+        let s = String(txt||'');
+        toRemove.forEach(n => {
+          const re = new RegExp('<<'+escapeReg(n)+'>>','g');
+          const before = s.length; s = s.replace(re, ''); const after = s.length; if (after !== before) removed++;
+        });
+        // Also collapse double spaces and tidy punctuation
+        s = s.replace(/\s{2,}/g,' ').replace(/\s+([,.;:!?])/g,'$1');
+        return s.trim();
+      };
+      if (t.subject) {
+        if (typeof t.subject.fr === 'string') t.subject.fr = res(t.subject.fr);
+        if (typeof t.subject.en === 'string') t.subject.en = res(t.subject.en);
+      }
+      if (t.body) {
+        if (typeof t.body.fr === 'string') t.body.fr = res(t.body.fr);
+        if (typeof t.body.en === 'string') t.body.en = res(t.body.en);
+      }
+    });
+    return removed;
   }
 
   function renderCategoryFilter() {
