@@ -1,5 +1,6 @@
 // Admin Console for Email Assistant v6
 (function () {
+  try { window.__EA_SCRIPT_LOADED = Date.now(); } catch {}
   const JSON_PATH = './complete_email_templates.json';
   const DRAFT_KEY = 'ea_admin_draft_v2';
 
@@ -28,6 +29,19 @@
   const modalConfirm = $('#modal-confirm');
   const modalCancel = $('#modal-cancel');
   const modalClose = $('#modal-close');
+
+  // Global diagnostics: surface runtime errors in the UI, and log boot
+  try {
+    console.info('[Admin Console] Booting admin-console.js…');
+    window.addEventListener('error', (e) => {
+      try { notify('Erreur: ' + (e?.error?.message || e?.message || 'inconnue'), 'warn'); } catch {}
+      console.error('[Admin Console] window.onerror', e?.error || e);
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+      try { notify('Erreur (promesse): ' + (e?.reason?.message || String(e?.reason) || 'inconnue'), 'warn'); } catch {}
+      console.error('[Admin Console] unhandledrejection', e?.reason);
+    });
+  } catch {}
 
   const langSwitch = $('#lang-switch');
   const fileInput = $('#file-input');
@@ -127,6 +141,12 @@
     }
   }
 
+  async function tryFetchJson(url) {
+    const resp = await fetch(url, { cache: 'no-cache' });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return resp.json();
+  }
+
   async function loadInitial() {
     const draft = loadFromDraft();
     if (draft) {
@@ -134,10 +154,34 @@
       afterDataLoad();
       return;
     }
-    const resp = await fetch(JSON_PATH);
-    const json = await resp.json();
-    data = ensureSchema(json);
+    const candidates = [
+      '/complete_email_templates.json', // user confirmed this URL works
+      JSON_PATH,
+      './assets/complete_email_templates.json',
+      '/assets/complete_email_templates.json',
+      './public/complete_email_templates.json',
+      '/public/complete_email_templates.json'
+    ];
+    let loaded = null, lastErr = null;
+    for (const u of candidates) {
+      try {
+        const json = await tryFetchJson(u);
+        loaded = ensureSchema(json);
+        break;
+      } catch (e) { lastErr = e; }
+    }
+    if (!loaded) {
+      notify('Erreur de chargement du JSON (aucune source trouvée).', 'warn');
+      console.error('Failed to load any template JSON from', candidates, lastErr);
+      loaded = ensureSchema({});
+    }
+    data = loaded;
     afterDataLoad();
+    try {
+      const n = data?.templates?.length || 0;
+      console.info('[Admin Console] Loaded templates:', n);
+      notify(`${n} template(s) chargé(s)`);
+    } catch {}
   }
 
   function afterDataLoad() {
@@ -151,6 +195,9 @@
     renderMain();
     updateKpis();
     renderWarnings();
+    if (!data.templates.length) {
+      notify('Aucun template chargé. Utilisez « Importer JSON » ou « Réinitialiser ».', 'warn');
+    }
   // Expose a stable getter for current data for dev tools
   try { window.__EA_DATA__ = () => JSON.parse(JSON.stringify(data)); } catch {}
     // Sync segmented toggle buttons
@@ -1322,25 +1369,99 @@
   }
 
   // Import/Export/Reset/Help
-  btnImport.onclick = () => fileInput.click();
-  fileInput.onchange = async (e) => {
-    const f = e.target.files?.[0];
+  function readFileAsText(file) {
+    if (file?.text) return file.text();
+    // Fallback for older browsers
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error || new Error('File read error'));
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.readAsText(file);
+    });
+  }
+
+  async function handleImportedFile(f) {
     if (!f) return;
+    notify('Import en cours…');
+    let txt;
     try {
-      const txt = await f.text();
-      const json = ensureSchema(JSON.parse(txt));
-      data = json;
-      selectedTemplateId = data.templates[0]?.id || null;
-      saveDraft();
-      afterDataLoad();
-      notify('Fichier importé et brouillon mis à jour.');
-    } catch (err) {
-      notify('Fichier invalide.', 'warn');
-      console.error(err);
-    } finally {
-      fileInput.value = '';
+      txt = await readFileAsText(f);
+    } catch (e) {
+      notify('Erreur de lecture du fichier.', 'warn');
+      console.error('readFile error', e);
+      return;
     }
-  };
+    let parsed;
+    try {
+      parsed = JSON.parse(txt);
+    } catch (pe) {
+      notify('JSON invalide: impossible d\'analyser le fichier.', 'warn');
+      console.error('JSON parse error', pe);
+      return;
+    }
+    const json = ensureSchema(parsed);
+    const tplCount = Array.isArray(json.templates) ? json.templates.length : 0;
+    const varCount = json.variables ? Object.keys(json.variables).length : 0;
+    const catCount = Array.isArray(json.metadata?.categories) ? json.metadata.categories.length : 0;
+
+    showModal({
+      title: 'Importer ce JSON ? ',
+      bodyHtml: `
+        <div class="hint">Le brouillon local sera remplacé par le contenu du fichier.</div>
+        <ul style="margin:8px 0 0 18px">
+          <li><strong>Templates:</strong> ${tplCount}</li>
+          <li><strong>Variables:</strong> ${varCount}</li>
+          <li><strong>Catégories:</strong> ${catCount}</li>
+        </ul>
+      `,
+      confirmText: 'Importer',
+      onConfirm: () => {
+        try {
+          data = json;
+          selectedTemplateId = data.templates[0]?.id || null;
+          saveDraft();
+          afterDataLoad();
+          notify('Fichier importé et brouillon mis à jour.');
+        } catch (e2) {
+          notify('Échec lors de l\'application des données importées.', 'warn');
+          console.error(e2);
+        }
+      }
+    });
+  }
+
+  function startImportFlow() {
+    // Most reliable: create an ephemeral input and click it
+    const tmp = document.createElement('input');
+    tmp.type = 'file';
+    tmp.accept = '.json,application/json';
+    tmp.style.position = 'fixed';
+    tmp.style.left = '-9999px';
+    tmp.onchange = async (e) => {
+      const f = e.target.files?.[0];
+      await handleImportedFile(f);
+      tmp.remove();
+    };
+    document.body.appendChild(tmp);
+    try {
+      if (typeof tmp.showPicker === 'function') tmp.showPicker(); else tmp.click();
+    } catch {
+      // Fallbacks to existing hidden input/label if the ephemeral input is blocked
+      const lbl = document.getElementById('file-input-label');
+      if (lbl) lbl.click(); else try { (document.getElementById('file-input')||{}).click?.(); } catch {}
+      tmp.remove();
+    }
+  }
+
+  if (btnImport && fileInput) {
+    btnImport.onclick = () => startImportFlow();
+    fileInput.onchange = async (e) => {
+      const f = e.target.files?.[0];
+      await handleImportedFile(f);
+      // allow re-importing the same file by resetting the input
+      fileInput.value = '';
+    };
+  }
 
   btnExport.onclick = () => {
     data.metadata.totalTemplates = data.templates.length;
@@ -1363,7 +1484,7 @@
     location.reload();
   };
 
-  btnHelp.onclick = () => {
+  if (btnHelp) btnHelp.onclick = () => {
     try { window.open('./help.html', '_blank', 'noopener'); } catch {}
     const code = (s) => `<pre style="background:#0b1020;color:#e5e7eb;padding:10px;border-radius:10px;overflow:auto;"><code>${escapeHtml(s)}</code></pre>`;
     const copyBtn = (s) => `<button data-copy="${escapeAttr(s)}" style="margin-top:6px;">Copier</button>`;
@@ -1727,5 +1848,59 @@
     notify('Erreur de chargement du JSON.', 'warn');
     console.error(err);
   });
+  // Visible boot signal
+  try { notify('Console admin prête'); } catch {}
+
+  // Event delegation safety net: ensures core buttons work even if direct bindings failed
+  document.addEventListener('click', (e) => {
+    const t = e.target;
+    if (!t) return;
+    const resetBtn = t.closest && t.closest('#btn-reset');
+    if (resetBtn) {
+      e.preventDefault();
+      if (confirm('Effacer le brouillon local et recharger le fichier original ?')) {
+        try { localStorage.removeItem(DRAFT_KEY); } catch {}
+        location.reload();
+      }
+      return;
+    }
+    const importBtn = t.closest && t.closest('#btn-import');
+    if (importBtn) {
+      e.preventDefault();
+      startImportFlow();
+      return;
+    }
+    const helpBtn = t.closest && t.closest('#btn-help');
+    if (helpBtn) {
+      e.preventDefault();
+      if (typeof btnHelp?.onclick === 'function') {
+        try { btnHelp.onclick(); } catch {}
+      } else {
+        try { window.open('./help.html', '_blank', 'noopener'); } catch {}
+      }
+      return;
+    }
+  }, { capture: true });
+
+  // Drag-and-drop import fallback
+  try {
+    window.addEventListener('dragover', (e) => {
+      if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) {
+        e.preventDefault();
+      }
+    });
+    window.addEventListener('drop', async (e) => {
+      if (!e.dataTransfer) return;
+      const files = Array.from(e.dataTransfer.files || []);
+      if (!files.length) return;
+      const f = files[0];
+      if (!/\.json$/i.test(f.name)) {
+        // Allow non-.json too, but warn
+        notify('Fichier sans extension .json – tentative d\'import…');
+      }
+      e.preventDefault();
+      await handleImportedFile(f);
+    });
+  } catch {}
 })();
 

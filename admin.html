@@ -51,7 +51,16 @@
   .seg-toggle { display:inline-flex; align-items:center; gap:4px; background:#f1f5f9; padding:4px; border-radius: 12px; border:1px solid var(--border); }
   .seg-toggle button { border:none; background:transparent; padding:6px 10px; border-radius: 10px; font-weight: 800; color: var(--muted); cursor:pointer; }
   .seg-toggle button[aria-pressed="true"] { background:white; color:#0f172a; box-shadow: 0 1px 0 rgba(0,0,0,0.02); }
-      .hidden-input { display: none; }
+      /* Hide file input visually but keep it interactable for label clicks (Safari/macOS friendly) */
+      .hidden-input {
+        position: absolute;
+        left: -9999px;
+        width: 0.1px;
+        height: 0.1px;
+        opacity: 0;
+        overflow: hidden;
+        z-index: -1;
+      }
 
       .container { display: grid; grid-template-columns: 320px 1fr; gap: 16px; padding: 16px; }
       .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 6px 30px rgba(2,6,23,0.06); }
@@ -113,9 +122,9 @@
         <button type="button" data-lang="fr" aria-pressed="false">FR</button>
         <button type="button" data-lang="en" aria-pressed="false">EN</button>
       </div>
-      <button id="btn-import">Importer JSON</button>
-      <label for="file-input" class="btn" style="cursor:pointer;">Choisir un fichier…</label>
-      <input id="file-input" class="hidden-input" type="file" accept="application/json" />
+  <button id="btn-import">Importer JSON</button>
+  <label id="file-input-label" for="file-input" class="btn" style="cursor:pointer;">Choisir un fichier…</label>
+  <input id="file-input" class="hidden-input" type="file" accept=".json,application/json" />
       <button id="btn-export" class="primary">Exporter JSON</button>
       <button id="btn-reset" class="warning" title="Revenir au fichier d'origine (efface le brouillon local)">Réinitialiser</button>
   <a href="./admin-excel.html" title="Assistant Excel"><button>Assistant Excel</button></a>
@@ -188,6 +197,17 @@
         </div>
 
     <script src="./assets/admin-console.js"></script>
+    <script>
+      // Watchdog: if the admin script failed to initialize, show a visible hint
+      setTimeout(() => {
+        if (!window.__EA_SCRIPT_LOADED) {
+          const el = document.createElement('div');
+          el.style.cssText = 'position:fixed;bottom:12px;left:12px;background:#111827;color:#fff;padding:10px 12px;border-radius:10px;z-index:2000;border:1px solid rgba(255,255,255,0.1);font-weight:600;';
+          el.textContent = 'Le script admin ne s\'est pas initialisé. Essayez Cmd+Shift+R (rafraîchissement dur).';
+          document.body.appendChild(el);
+        }
+      }, 1000);
+    </script>
     <script>
       // Light feature detection for dev endpoint; reveal button if reachable
       (function(){

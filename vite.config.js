@@ -11,9 +11,12 @@ export default defineConfig(({ mode }) => {
     name: 'write-templates-plugin',
     apply: 'serve', // dev only
     configureServer(server) {
-      const fs = require('fs');
-      const path = require('path');
       server.middlewares.use('/__replace_templates', async (req, res, next) => {
+        // Allow detection via OPTIONS
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 204; // No Content
+          return res.end();
+        }
         if (req.method !== 'POST') return next();
         try {
           let body = '';
@@ -27,7 +30,7 @@ export default defineConfig(({ mode }) => {
                 res.end(JSON.stringify({ ok: false, error: 'Invalid payload. Expected { metadata, variables, templates }.' }));
                 return;
               }
-              const outPath = path.resolve(__dirname, 'complete_email_templates.json');
+              const outPath = path.resolve(process.cwd(), 'complete_email_templates.json');
               fs.writeFileSync(outPath, JSON.stringify(json, null, 2), 'utf-8');
               res.setHeader('Content-Type', 'application/json');
               res.end(JSON.stringify({ ok: true, path: outPath }));

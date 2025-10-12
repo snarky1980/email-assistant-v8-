@@ -15,6 +15,7 @@
     "preview": "vite preview",
     "serve:static": "npx http-server -p 5173 .",
     "deploy": "npm run build && npx --yes gh-pages -d dist",
+    "templates:replace": "node scripts/replace-templates.mjs",
     "convert:docx": "node scripts/docx-to-templates.mjs",
     "merge:fr-en": "node scripts/merge-fr-en.mjs",
     "convert:xlsx": "node scripts/xlsx-to-templates.mjs"
