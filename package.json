@@ -14,7 +14,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "serve:static": "npx http-server -p 5173 .",
-    "deploy": "npm run build && gh-pages -d dist",
+    "deploy": "npm run build && npx --yes gh-pages -d dist",
     "convert:docx": "node scripts/docx-to-templates.mjs",
     "merge:fr-en": "node scripts/merge-fr-en.mjs",
     "convert:xlsx": "node scripts/xlsx-to-templates.mjs"
@@ -40,6 +40,7 @@
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.4.1",
+    "gh-pages": "^6.1.1",
     "xlsx": "^0.18.5",
     "cheerio": "^1.0.0-rc.12",
     "mammoth": "^1.6.0",
