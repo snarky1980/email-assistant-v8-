@@ -56,6 +56,9 @@
   const btnPreview = $('#btn-preview');
   // Keep a short-lived snapshot of the last non-empty warnings
   let lastWarnSnapshot = { items: [], at: 0 };
+  // Warnings-driven filtering/navigation helpers
+  let warnFilterActive = false;
+  let warnTplIds = new Set();
 
   // Utils
   const debounce = (fn, ms = 300) => {
@@ -162,6 +165,12 @@
 
   function renderWarnings() {
     const issues = validateData();
+    // Build a set of template IDs implicated in warnings (for filtering/jump)
+    warnTplIds = new Set();
+    for (const msg of issues) {
+      const id = parseIssueTemplateId(msg);
+      if (id) warnTplIds.add(id);
+    }
     let pinStored = null; try { pinStored = localStorage.getItem('ea_pin_warnings'); } catch {}
     let pinned = (pinStored === 'true' || pinStored === null); // default to pinned if not set
     try { if (pinStored === null) localStorage.setItem('ea_pin_warnings', 'true'); } catch {}
@@ -171,6 +180,11 @@
       lastWarnSnapshot = { items: issues.slice(0, 50), at: Date.now() };
       warningsEl.style.display = 'block';
       warningsEl.className = 'warn';
+      const itemsHtml = issues.map(i => {
+        const id = parseIssueTemplateId(i);
+        const safe = escapeHtml(i);
+        return `<li ${id ? `data-tplid="${escapeAttr(id)}" class="warn-item"` : ''}>${safe}${id ? ` <button data-jump="${escapeAttr(id)}" title="Aller au template" style="margin-left:8px;">→</button>` : ''}</li>`;
+      }).join('');
       warningsEl.innerHTML = `
         <div class="status-bar">
           <div><strong>Avertissements (${issues.length})</strong></div>
@@ -181,8 +195,15 @@
             </label>
           </div>
         </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+          <button id="btn-fix-add-vars" title="Créer les variables manquantes d’après les placeholders">Ajouter variables manquantes</button>
+          <button id="btn-fix-sync-vars" title="Lister tous les placeholders dans chaque template">Synchroniser variables des templates</button>
+          <label style="display:flex;align-items:center;gap:6px;font-weight:600;color:#9a3412;margin-left:auto;">
+            <input type="checkbox" id="warn-filter-toggle" ${warnFilterActive ? 'checked' : ''}> Voir uniquement les modèles avec avertissements
+          </label>
+        </div>
         <div id="warn-details" style="margin-top:8px; ${collapsed ? 'display:none;' : ''}">
-          <ul style="margin:6px 0 0 18px">${issues.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
+          <ul style="margin:6px 0 0 18px">${itemsHtml}</ul>
         </div>`;
       const pin = document.getElementById('pin-warnings');
       if (pin) {
@@ -200,6 +221,25 @@
           try { localStorage.setItem('ea_warn_collapsed', hide ? 'true' : 'false'); } catch {}
         };
       }
+      // Wire quick fixes
+      const fixAdd = document.getElementById('btn-fix-add-vars');
+      if (fixAdd) fixAdd.onclick = () => { quickFixAddMissingVariables(); saveDraft(); renderWarnings(); notify('Variables ajoutées à partir des placeholders.'); };
+      const fixSync = document.getElementById('btn-fix-sync-vars');
+      if (fixSync) fixSync.onclick = () => { quickFixSyncTemplateVariables(); saveDraft(); renderWarnings(); renderSidebar(); renderTemplateEditor(); notify('Variables des templates synchronisées.'); };
+      const warnTog = document.getElementById('warn-filter-toggle');
+      if (warnTog) warnTog.onchange = () => { warnFilterActive = warnTog.checked; renderSidebar(); };
+      // Jump handlers
+      warningsEl.addEventListener('click', (e) => {
+        const jumpBtn = e.target.closest('[data-jump]');
+        const id = jumpBtn?.getAttribute?.('data-jump') || e.target.closest('[data-tplid]')?.getAttribute?.('data-tplid');
+        if (!id) return;
+        const exists = data.templates.some(t => t.id === id);
+        if (exists) {
+          selectedTemplateId = id; _revealActiveOnRender = true; renderSidebar(); renderMain();
+        } else {
+          notify('Template introuvable: '+id, 'warn');
+        }
+      }, { once: true });
     } else {
       warningsEl.style.display = pinned ? 'block' : 'none';
       if (pinned) {
@@ -234,6 +274,42 @@
         };
       }
     }
+  }
+
+  function parseIssueTemplateId(msg) {
+    // Try to extract template id from known patterns
+    // e.g., "Template XYZ référence...", "Placeholder <<X>> ... (template XYZ, FR)", "ID en double: XYZ", "Catégorie inconnue pour XYZ:"
+    const s = String(msg||'');
+    let m = s.match(/\btemplate\s+([A-Za-z0-9_\-]+)/i); if (m) return m[1];
+    m = s.match(/\bdu\s+template\s+([A-Za-z0-9_\-]+)/i); if (m) return m[1];
+    m = s.match(/ID en double:\s*([A-Za-z0-9_\-]+)/i); if (m) return m[1];
+    m = s.match(/Catégorie inconnue pour\s+([A-Za-z0-9_\-]+)/i); if (m) return m[1];
+    return '';
+  }
+
+  function listAllPlaceholders() {
+    const set = new Set();
+    (data.templates || []).forEach(t => {
+      extractPlaceholdersFromTemplate(t).forEach(ph => set.add(ph));
+    });
+    return set;
+  }
+
+  function quickFixAddMissingVariables() {
+    const all = listAllPlaceholders();
+    const lib = data.variables || (data.variables = {});
+    let added = 0;
+    all.forEach(v => { if (!lib[v]) { lib[v] = inferVariableMeta(v); added++; } });
+    // Optional: notify count (already notifying outside)
+    return added;
+  }
+
+  function quickFixSyncTemplateVariables() {
+    (data.templates || []).forEach(t => {
+      const ph = extractPlaceholdersFromTemplate(t);
+      const current = Array.isArray(t.variables) ? t.variables : [];
+      t.variables = Array.from(new Set([...(current||[]), ...ph]));
+    });
   }
 
   function renderCategoryFilter() {
@@ -350,6 +426,7 @@
     const term = (searchTerm || '').toLowerCase();
     const cat = filterCategory;
     return data.templates.filter(t => {
+      if (warnFilterActive && warnTplIds.size && !warnTplIds.has(t.id)) return false;
       const matchesCat = cat === 'all' || t.category === cat;
       if (!matchesCat) return false;
       if (!term) return true;
