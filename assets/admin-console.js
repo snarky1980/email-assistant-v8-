@@ -21,6 +21,7 @@
   const kpiVariables = $('#kpi-variables');
   const warningsEl = $('#warnings');
   const noticeEl = $('#notice');
+<<<<<<< Updated upstream
   // Modal elements (for previews/confirmations)
   const modal = $('#modal');
   const modalTitle = $('#modal-title');
@@ -28,6 +29,8 @@
   const modalConfirm = $('#modal-confirm');
   const modalCancel = $('#modal-cancel');
   const modalClose = $('#modal-close');
+=======
+>>>>>>> Stashed changes
 
   const langSwitch = $('#lang-switch');
   const fileInput = $('#file-input');
@@ -56,11 +59,14 @@
   const btnPreview = $('#btn-preview');
   // Keep a short-lived snapshot of the last non-empty warnings
   let lastWarnSnapshot = { items: [], at: 0 };
+<<<<<<< Updated upstream
   // Warnings-driven filtering/navigation helpers
   let warnFilterActive = false;
   let warnTplIds = new Set();
 
   function escapeReg(s){ return String(s).replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
+=======
+>>>>>>> Stashed changes
 
   // Utils
   const debounce = (fn, ms = 300) => {
@@ -88,6 +94,7 @@
     }
   }, 400);
 
+<<<<<<< Updated upstream
   function showModal({ title, bodyHtml, confirmText = 'Confirmer', onConfirm }) {
     if (!modal) { alert('' + (bodyHtml?.replace?.(/<[^>]+>/g, '') || '')); if (onConfirm) onConfirm(); return; }
     modalTitle.textContent = title || 'Aperçu';
@@ -100,6 +107,8 @@
     modal.style.display = 'flex';
   }
 
+=======
+>>>>>>> Stashed changes
   // Ephemeral notification (does not hide persistent warnings)
   const notify = (msg, type = 'info') => {
     if (!noticeEl) return;
@@ -153,6 +162,7 @@
     renderMain();
     updateKpis();
     renderWarnings();
+<<<<<<< Updated upstream
   // Expose a stable getter for current data for dev tools
   try { window.__EA_DATA__ = () => JSON.parse(JSON.stringify(data)); } catch {}
     // Sync segmented toggle buttons
@@ -160,6 +170,9 @@
       const btns = $$('button[data-lang]', langSwitch);
       btns.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
     }
+=======
+    if (langSwitch) langSwitch.value = lang;
+>>>>>>> Stashed changes
   }
 
   function updateKpis() {
@@ -169,12 +182,15 @@
 
   function renderWarnings() {
     const issues = validateData();
+<<<<<<< Updated upstream
     // Build a set of template IDs implicated in warnings (for filtering/jump)
     warnTplIds = new Set();
     for (const msg of issues) {
       const id = parseIssueTemplateId(msg);
       if (id) warnTplIds.add(id);
     }
+=======
+>>>>>>> Stashed changes
     let pinStored = null; try { pinStored = localStorage.getItem('ea_pin_warnings'); } catch {}
     let pinned = (pinStored === 'true' || pinStored === null); // default to pinned if not set
     try { if (pinStored === null) localStorage.setItem('ea_pin_warnings', 'true'); } catch {}
@@ -184,11 +200,14 @@
       lastWarnSnapshot = { items: issues.slice(0, 50), at: Date.now() };
       warningsEl.style.display = 'block';
       warningsEl.className = 'warn';
+<<<<<<< Updated upstream
       const itemsHtml = issues.map(i => {
         const id = parseIssueTemplateId(i);
         const safe = escapeHtml(i);
         return `<li ${id ? `data-tplid="${escapeAttr(id)}" class="warn-item"` : ''}>${safe}${id ? ` <button data-jump="${escapeAttr(id)}" title="Aller au template" style="margin-left:8px;">→</button>` : ''}</li>`;
       }).join('');
+=======
+>>>>>>> Stashed changes
       warningsEl.innerHTML = `
         <div class="status-bar">
           <div><strong>Avertissements (${issues.length})</strong></div>
@@ -199,6 +218,7 @@
             </label>
           </div>
         </div>
+<<<<<<< Updated upstream
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
           <button id="btn-fix-add-vars" title="Créer les variables manquantes d’après les placeholders">Ajouter variables manquantes</button>
           <button id="btn-fix-sync-vars" title="Lister tous les placeholders dans chaque template">Synchroniser variables des templates</button>
@@ -210,6 +230,10 @@
         </div>
         <div id="warn-details" style="margin-top:8px; ${collapsed ? 'display:none;' : ''}">
           <ul style="margin:6px 0 0 18px">${itemsHtml}</ul>
+=======
+        <div id="warn-details" style="margin-top:8px; ${collapsed ? 'display:none;' : ''}">
+          <ul style="margin:6px 0 0 18px">${issues.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
+>>>>>>> Stashed changes
         </div>`;
       const pin = document.getElementById('pin-warnings');
       if (pin) {
@@ -227,6 +251,7 @@
           try { localStorage.setItem('ea_warn_collapsed', hide ? 'true' : 'false'); } catch {}
         };
       }
+<<<<<<< Updated upstream
       // Wire quick fixes
       const fixAdd = document.getElementById('btn-fix-add-vars');
       if (fixAdd) fixAdd.onclick = () => { quickFixAddMissingVariables(); saveDraft(); renderWarnings(); notify('Variables ajoutées à partir des placeholders.'); };
@@ -266,6 +291,8 @@
           notify('Template introuvable: '+id, 'warn');
         }
       }, { once: true });
+=======
+>>>>>>> Stashed changes
     } else {
       warningsEl.style.display = pinned ? 'block' : 'none';
       if (pinned) {
@@ -443,7 +470,10 @@
       el.onclick = (e) => {
         if (bulkMode) return; // In bulk mode, clicking tiles won’t navigate
         selectedTemplateId = el.dataset.id;
+<<<<<<< Updated upstream
         _revealActiveOnRender = true;
+=======
+>>>>>>> Stashed changes
         renderSidebar(); // refresh highlight
         renderMain();
       };
@@ -1346,6 +1376,9 @@
 
   btnExport.onclick = () => {
     data.metadata.totalTemplates = data.templates.length;
+    if (!selectedTemplateId && data.templates.length) {
+      selectedTemplateId = data.templates[0].id;
+    }
     const issues = validateData();
     if (issues.length) {
       const detail = issues.slice(0, 10).map((i, idx) => `${idx+1}. ${i}`).join('\n');
@@ -1649,6 +1682,7 @@
     renderSidebar();
   };
 
+<<<<<<< Updated upstream
   // Segmented toggle handler
   if (langSwitch) {
     langSwitch.addEventListener('click', (e) => {
@@ -1692,6 +1726,14 @@
       }
     }
   });
+=======
+  langSwitch.onchange = (e) => {
+    lang = e.target.value;
+    try { localStorage.setItem('ea_admin_lang', lang); } catch {}
+    renderSidebar();
+    renderMain();
+  };
+>>>>>>> Stashed changes
 
   // Tabs
   function setTab(active) {
@@ -1727,3 +1769,4 @@
     console.error(err);
   });
 })();
+
