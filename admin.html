@@ -119,6 +119,7 @@
       <button id="btn-export" class="primary">Exporter JSON</button>
       <button id="btn-reset" class="warning" title="Revenir au fichier d'origine (efface le brouillon local)">Réinitialiser</button>
   <a href="./admin-excel.html" title="Assistant Excel"><button>Assistant Excel</button></a>
+    <button id="btn-replace-repo" style="display:none" title="Mode dev uniquement – Écrit complete_email_templates.json et recharge">Remplacer fichier du dépôt</button>
       <button id="btn-help">Aide</button>
     </header>
 
@@ -187,5 +188,22 @@
         </div>
 
     <script src="./assets/admin-console.js"></script>
+    <script>
+      // Light feature detection for dev endpoint; reveal button if reachable
+      (function(){
+        const btn = document.getElementById('btn-replace-repo'); if (!btn) return;
+        fetch('/__replace_templates', { method:'OPTIONS' }).then(()=>{ btn.style.display=''; }).catch(()=>{});
+        btn.onclick = async () => {
+          try {
+            if (!window.__EA_DATA__) { alert('Aucune donnée en mémoire. Enregistrez d’abord ou importez un JSON.'); return; }
+            const obj = window.__EA_DATA__();
+            const resp = await fetch('/__replace_templates', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(obj) });
+            const j = await resp.json().catch(()=>({ok:false,error:'Réponse invalide du serveur'}));
+            if (!resp.ok || !j.ok) throw new Error(j.error || 'Échec serveur');
+            alert('Fichier remplacé. Rechargement…'); location.reload();
+          } catch(e){ console.error(e); alert('Échec du remplacement (dev uniquement)'); }
+        };
+      })();
+    </script>
   </body>
 </html>

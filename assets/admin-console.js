@@ -153,6 +153,8 @@
     renderMain();
     updateKpis();
     renderWarnings();
+  // Expose a stable getter for current data for dev tools
+  try { window.__EA_DATA__ = () => JSON.parse(JSON.stringify(data)); } catch {}
     // Sync segmented toggle buttons
     if (langSwitch) {
       const btns = $$('button[data-lang]', langSwitch);
