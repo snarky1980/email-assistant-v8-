@@ -47,17 +47,32 @@ import XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
 
   function readXlsx(file){
     return new Promise((resolve, reject) => {
-      const fr = new FileReader(); fr.onerror = reject; fr.onload = () => {
-        try { const wb = XLSX.read(fr.result, {type:'binary'}); const ws = wb.Sheets[wb.SheetNames[0]]; const rows = XLSX.utils.sheet_to_json(ws, { header:1, raw:false }); resolve(rows); } catch(e){ reject(e); }
-      }; fr.readAsBinaryString(file);
+      try { if (!XLSX) { reject(new Error('Librairie XLSX non chargée.')); return; } } catch { /* ignore */ }
+      const fr = new FileReader();
+      fr.onerror = reject;
+      fr.onload = () => {
+        try {
+          const data = new Uint8Array(fr.result);
+          const wb = XLSX.read(data, { type: 'array' });
+          const first = wb.SheetNames && wb.SheetNames[0];
+          if (!first) throw new Error('Aucune feuille trouvée dans le classeur.');
+          const ws = wb.Sheets[first];
+          const rows = XLSX.utils.sheet_to_json(ws, { header:1, raw:false });
+          resolve(rows);
+        } catch(e){ reject(e); }
+      };
+      fr.readAsArrayBuffer(file);
     });
   }
 
   function rowsToObjects(rows){
     if (!rows?.length) return [];
-    const header = rows[0].map(h => H.get(normKey(h)) || normKey(h));
+    // Find first non-empty row as header (robust to leading blanks)
+    let headIdx = rows.findIndex(r => Array.isArray(r) && r.some(c => String(c||'').trim() !== ''));
+    if (headIdx < 0) return [];
+    const header = rows[headIdx].map(h => H.get(normKey(h)) || normKey(h));
     const out = [];
-    for (let i=1;i<rows.length;i++){
+    for (let i=headIdx+1;i<rows.length;i++){
       const r = rows[i]; if (!r || r.every(c => String(c||'').trim()==='')) continue;
       const obj = {}; for (let c=0;c<header.length;c++){ const k = header[c]; if (!k) continue; obj[k] = r[c] != null ? String(r[c]) : ''; }
       out.push(obj);
@@ -323,7 +338,14 @@ import XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file; document.body.appendChild(a); a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 1000); a.remove();
   }
 
-  if (btnParse) btnParse.onclick = () => { parseAndValidate().catch(e => { console.error(e); notify('Échec de l’analyse', 'warn'); }); };
+  if (btnParse) btnParse.onclick = () => { parseAndValidate().catch(e => {
+    console.error(e);
+    try {
+      boxErr.style.display = 'block';
+      boxErr.innerHTML = `<div><strong>Erreur d’analyse</strong></div><div class="hint" style="margin-top:6px;white-space:pre-wrap">${escapeHtml(e?.message || String(e))}</div>`;
+    } catch {}
+    notify('Échec de l’analyse', 'warn');
+  }); };
   if (btnExport) btnExport.onclick = exportJson;
   if (btnDlTpl) btnDlTpl.onclick = () => {
     // Build a tiny starter Excel in-memory via CSV fallback for simplicity
