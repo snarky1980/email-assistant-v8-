@@ -11,6 +11,7 @@ import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
   const btnParse = $('#btn-parse');
   const btnExport = $('#btn-export');
   const btnImportAdmin = $('#btn-import-admin');
+  const btnReplaceRepo = $('#btn-replace-repo');
   const boxSummary = $('#summary');
   const boxWarn = $('#warnings');
   const boxErr = $('#errors');
@@ -331,6 +332,7 @@ import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
     window._excelAssistant = { templates, variables, client };
     btnExport.disabled = templates.length === 0;
     if (btnImportAdmin) btnImportAdmin.disabled = templates.length === 0;
+    if (btnReplaceRepo) btnReplaceRepo.disabled = templates.length === 0;
     notify('Analyse terminée.');
   }
 
@@ -379,6 +381,24 @@ import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
     } catch (e) {
       console.error(e);
       notify('Impossible d’importer dans la console.', 'warn');
+    }
+  };
+  if (btnReplaceRepo) btnReplaceRepo.onclick = async () => {
+    try {
+      const st = window._excelAssistant || { templates:[], variables:{}, client:'client' };
+      const obj = {
+        metadata: { version: '1.0', totalTemplates: st.templates.length, languages: ['fr','en'], categories: Array.from(new Set(st.templates.map(t=>t.category).filter(Boolean))) },
+        variables: st.variables,
+        templates: st.templates
+      };
+      const resp = await fetch('/__replace_templates', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(obj) });
+      const json = await resp.json().catch(()=>({ ok:false, error:'Invalid server response' }));
+      if (!resp.ok || !json.ok) { throw new Error(json.error || `HTTP ${resp.status}`); }
+      notify('Fichier remplacé. Rechargement...');
+      setTimeout(()=>location.reload(), 500);
+    } catch (e) {
+      console.error(e);
+      notify('Échec du remplacement (mode dev uniquement). Ouvrir la console.', 'warn');
     }
   };
   if (btnDlTpl) btnDlTpl.onclick = () => {
