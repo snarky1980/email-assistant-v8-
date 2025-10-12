@@ -259,7 +259,23 @@ import XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
     const f = inpFile?.files?.[0]; if (!f) { notify('Sélectionnez un fichier .xlsx', 'warn'); return; }
     const client = (inpClient?.value||'client').trim().toLowerCase().replace(/[^a-z0-9_]+/g,'');
     const rows = await readXlsx(f); const objs = rowsToObjects(rows);
-    if (!objs.length) { notify('Aucune ligne exploitable.', 'warn'); return; }
+    if (!objs.length) {
+      try {
+        let headIdx = rows.findIndex(r => Array.isArray(r) && r.some(c => String(c||'').trim() !== ''));
+        if (headIdx >= 0) {
+          const rawHeader = rows[headIdx].map(c => String(c||''));
+          const mapped = rawHeader.map(h => H.get(normKey(h)) || normKey(h));
+          boxErr.style.display = 'block';
+          boxErr.innerHTML = `<div><strong>Impossible de lire des lignes après l’entête</strong></div>
+            <div class="hint" style="margin-top:6px;white-space:pre-wrap">Entêtes détectées:\n- ${escapeHtml(rawHeader.join(' | '))}\n\nCorrespondances internes:\n- ${escapeHtml(mapped.join(' | '))}\n\nColonnes acceptées: ID, CATEGORY_FR|CATEGORY_EN, TITLE_FR|TITLE_EN, DESCRIPTION_FR|DESCRIPTION_EN, SUBJECT_FR|SUBJECT_EN, BODY_FR|BODY_EN, VARS_FR|VARS_EN, VARS_DESC_FR|VARS_DESC_EN.</div>`;
+        } else {
+          boxErr.style.display = 'block';
+          boxErr.innerHTML = `<div><strong>Aucune entête détectée</strong></div><div class="hint" style="margin-top:6px">Vérifiez que la première ligne non vide contient les noms de colonnes.</div>`;
+        }
+      } catch {}
+      notify('Aucune ligne exploitable.', 'warn');
+      return;
+    }
     const { templates, variables, warnings, errors, normalizedRows, suggestions } = buildOutput(objs, { defaultCategory: inpDefaultCat?.value || '' });
 
     // Show summary
@@ -342,7 +358,7 @@ import XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
     console.error(e);
     try {
       boxErr.style.display = 'block';
-      boxErr.innerHTML = `<div><strong>Erreur d’analyse</strong></div><div class="hint" style="margin-top:6px;white-space:pre-wrap">${escapeHtml(e?.message || String(e))}</div>`;
+      boxErr.innerHTML = `<div><strong>Erreur d’analyse</strong></div><div class="hint" style="margin-top:6px;white-space:pre-wrap">${escapeHtml(e?.stack || e?.message || String(e))}</div>`;
     } catch {}
     notify('Échec de l’analyse', 'warn');
   }); };
