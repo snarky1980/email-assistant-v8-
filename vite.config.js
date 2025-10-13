@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 import fs from 'fs'
+import pkg from './package.json' assert { type: 'json' }
 
 export default defineConfig(({ mode }) => {
   // Use GitHub Pages base only in production build; use root in dev to avoid nested path issues.
@@ -81,6 +82,11 @@ export default defineConfig(({ mode }) => {
   return {
     base,
     plugins: [react(), tailwindcss(), ...(mode !== 'production' ? [writeTemplatesPlugin] : []), copyAdminStaticPlugin],
+    define: {
+      __APP_VERSION__: JSON.stringify(pkg.version || ''),
+      __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+      __COMMIT_SHA__: JSON.stringify(process.env.VITE_COMMIT_SHA || ''),
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
