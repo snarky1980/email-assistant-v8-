@@ -169,6 +169,9 @@ function App() {
   // State for template data
   const [templatesData, setTemplatesData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [templatesSig, setTemplatesSig] = useState('') // ETag or content signature
+  const [updateNotice, setUpdateNotice] = useState('') // transient banner
+  const manualCheckRef = useRef(null)
   
   // Separate interface language from template language
   const [interfaceLanguage, setInterfaceLanguage] = useState(savedState.interfaceLanguage || 'fr') // Interface language
@@ -281,13 +284,17 @@ function App() {
           : [withBust(REPO_RAW_URL), withBust(LOCAL_URL)]
 
         let loaded = null
+        let sig = ''
         let lastErr = null
         for (const url of candidates) {
           try {
             if (debug) console.log('[EA][Debug] Try fetch', url)
-            const resp = await fetch(url, { cache: 'no-cache' })
+            const resp = await fetch(url, { cache: 'no-store' })
             if (!resp.ok) throw new Error('HTTP ' + resp.status)
             const j = await resp.json()
+            // Prefer ETag if available; else compute a lightweight signature
+            const etag = resp.headers?.get('etag') || ''
+            sig = etag || (j?.metadata?.updatedAt || (j?.metadata?.totalTemplates + ':' + (j?.templates?.length || 0)))
             loaded = j
             break
           } catch (e) {
@@ -297,7 +304,8 @@ function App() {
         }
         if (!loaded) throw lastErr || new Error('No template source reachable')
         setTemplatesData(loaded)
-        if (debug) console.log('[EA][Debug] Templates loaded:', loaded.templates?.length)
+        setTemplatesSig(sig || 'initial')
+        if (debug) console.log('[EA][Debug] Templates loaded:', loaded.templates?.length, 'sig=', sig)
       } catch (error) {
         console.error('Error loading templates data:', error)
       } finally {
@@ -307,6 +315,57 @@ function App() {
     
     loadTemplatesData()
   }, [])
+
+  // Background template auto-refresh: periodically checks for updates and applies without page reload
+  useEffect(() => {
+    if (loading) return
+    let cancelled = false
+    const REPO_RAW_URL = 'https://raw.githubusercontent.com/snarky1980/email-assistant-v6/main/complete_email_templates.json'
+    const LOCAL_URL = './complete_email_templates.json'
+    const isLocal = /^(localhost|127\.|0\.0\.0\.0)/i.test(window.location.hostname)
+    const getCandidates = () => {
+      const ts = Date.now()
+      const withBust = (u) => u + (u.includes('?') ? '&' : '?') + 'cb=' + ts
+      return isLocal ? [withBust(LOCAL_URL), withBust(REPO_RAW_URL)] : [withBust(REPO_RAW_URL), withBust(LOCAL_URL)]
+    }
+    const check = async () => {
+      for (const url of getCandidates()) {
+        try {
+          const resp = await fetch(url, { cache: 'no-store' })
+          if (!resp.ok) continue
+          const j = await resp.json()
+          const etag = resp.headers?.get('etag') || ''
+          const sig = etag || (j?.metadata?.updatedAt || (j?.metadata?.totalTemplates + ':' + (j?.templates?.length || 0)))
+          if (sig && sig !== templatesSig) {
+            if (cancelled) return
+            setTemplatesData(j)
+            setTemplatesSig(sig)
+            setUpdateNotice('Modèles mis à jour')
+            setTimeout(() => setUpdateNotice(''), 4000)
+            if (debug) console.log('[EA][Debug] Templates auto-updated; sig=', sig)
+            return
+          }
+          // If sig is same, do nothing
+          return
+        } catch (_) { /* try next */ }
+      }
+    }
+    // First delayed check, then interval every 10 minutes
+    manualCheckRef.current = check
+    const t1 = setTimeout(check, 20 * 1000) // first check after ~20s
+    const iv = setInterval(check, 5 * 60 * 1000) // every 5 minutes
+    return () => { cancelled = true; clearTimeout(t1); clearInterval(iv) }
+  }, [loading, templatesSig, debug])
+
+  // Manual check handler (header button)
+  const handleManualCheck = () => {
+    if (manualCheckRef.current) {
+      setUpdateNotice('Vérification des modèles…')
+      // Clear the message soon; if an update happens, it will be replaced by "Modèles mis à jour"
+      setTimeout(() => setUpdateNotice(''), 1500)
+      manualCheckRef.current()
+    }
+  }
 
   // Auto-select first template once data is available
   useEffect(() => {
@@ -500,6 +559,20 @@ function App() {
     if (!selectedTemplate) return
     
     // Build full URL with parameters
+    // Inline banner for background updates
+    const UpdateBanner = () => (
+      updateNotice ? (
+        <div style={{
+          position: 'fixed', bottom: 16, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 9999, background: '#0f172a', color: '#fff',
+          padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)',
+          boxShadow: '0 6px 20px rgba(0,0,0,0.2)', fontWeight: 600, fontSize: 14
+        }}>
+          {updateNotice}
+        </div>
+      ) : null
+    )
+
     const currentUrl = window.location.origin + window.location.pathname
     const templateUrl = `${currentUrl}?id=${selectedTemplate.id}&lang=${templateLanguage}`
     
@@ -558,6 +631,8 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-green-50">
+      {/* Background update banner */}
+      <UpdateBanner />
       {debug && (
         <div style={{ position: 'fixed', bottom: 8, left: 8, background: '#1e293b', color: '#fff', padding: '8px 12px', borderRadius: 8, fontSize: 12, zIndex: 9999, boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>
           <div style={{ fontWeight: 600 }}>Debug</div>
@@ -576,54 +651,62 @@ function App() {
         </div>
       ) : (
         <>
-      {/* Dynamic header with EXACT teal/sage styling */}
-      <header className="bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 shadow-xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div className="relative">
-                <Mail className="h-10 w-10 text-white animate-pulse" />
-                <Sparkles className="h-4 w-4 text-yellow-300 absolute -top-1 -right-1 animate-bounce" />
+        {/* Dynamic header with EXACT teal/sage styling */}
+        <header className="bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 shadow-xl">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="relative">
+                  <Mail className="h-10 w-10 text-white animate-pulse" />
+                  <Sparkles className="h-4 w-4 text-yellow-300 absolute -top-1 -right-1 animate-bounce" />
+                </div>
+                <div>
+                  <h1 className="text-3xl font-bold text-white drop-shadow-lg">{t.title}</h1>
+                  <p className="text-emerald-100 text-sm">{t.subtitle}</p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-3xl font-bold text-white drop-shadow-lg">{t.title}</h1>
-                <p className="text-emerald-100 text-sm">{t.subtitle}</p>
-              </div>
-            </div>
-            
-            {/* Interface language with modern style */}
-            <div className="flex items-center space-x-3 bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2">
-              <Globe className="h-5 w-5 text-white" />
-              <span className="text-white font-medium">{t.interfaceLanguage}:</span>
-              <div className="flex bg-white/20 rounded-lg p-1">
+              
+              {/* Interface language with modern style + Manual update check */}
+              <div className="flex items-center space-x-3 bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2">
+                <Globe className="h-5 w-5 text-white" />
+                <span className="text-white font-medium">{t.interfaceLanguage}:</span>
+                <div className="flex bg-white/20 rounded-lg p-1">
+                  <button
+                    onClick={() => setInterfaceLanguage('fr')}
+                    className={`px-4 py-2 text-sm font-bold rounded-md transition-all duration-300 ${
+                      interfaceLanguage === 'fr'
+                        ? 'bg-white text-emerald-600 shadow-lg transform scale-105'
+                        : 'text-white hover:bg-white/20'
+                    }`}
+                  >
+                    FR
+                  </button>
+                  <button
+                    onClick={() => setInterfaceLanguage('en')}
+                    className={`px-4 py-2 text-sm font-bold rounded-md transition-all duration-300 ${
+                      interfaceLanguage === 'en'
+                        ? 'bg-white text-emerald-600 shadow-lg transform scale-105'
+                        : 'text-white hover:bg-white/20'
+                    }`}
+                  >
+                    EN
+                  </button>
+                </div>
+                {/* Manual templates update check */}
                 <button
-                  onClick={() => setInterfaceLanguage('fr')}
-                  className={`px-4 py-2 text-sm font-bold rounded-md transition-all duration-300 ${
-                    interfaceLanguage === 'fr'
-                      ? 'bg-white text-emerald-600 shadow-lg transform scale-105'
-                      : 'text-white hover:bg-white/20'
-                  }`}
+                  onClick={handleManualCheck}
+                  className="ml-3 px-3 py-2 text-xs font-bold rounded-md bg-white/20 text-white hover:bg-white/30 transition-colors"
+                  title="Vérifier les mises à jour des modèles maintenant"
                 >
-                  FR
-                </button>
-                <button
-                  onClick={() => setInterfaceLanguage('en')}
-                  className={`px-4 py-2 text-sm font-bold rounded-md transition-all duration-300 ${
-                    interfaceLanguage === 'en'
-                      ? 'bg-white text-emerald-600 shadow-lg transform scale-105'
-                      : 'text-white hover:bg-white/20'
-                  }`}
-                >
-                  EN
+                  Vérifier MAJ
                 </button>
               </div>
             </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Main content with 4-column layout from original */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Main content with 4-column layout from original */}
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
   <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Left panel - Template list */}
           <div className="lg:col-span-1">
