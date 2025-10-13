@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 import fs from 'fs'
+<<<<<<< Updated upstream
 import { fileURLToPath } from 'url'
 // Read package.json without JSON import attributes to keep Node 20 CI happy
 const pkg = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf-8'))
@@ -10,6 +11,8 @@ const pkg = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url
 // ESM-safe __dirname for Node 20+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+=======
+>>>>>>> Stashed changes
 
 export default defineConfig(({ mode }) => {
   // Use GitHub Pages base only in production build; use root in dev to avoid nested path issues.
@@ -37,11 +40,15 @@ export default defineConfig(({ mode }) => {
                 res.end(JSON.stringify({ ok: false, error: 'Invalid payload. Expected { metadata, variables, templates }.' }));
                 return;
               }
+<<<<<<< Updated upstream
               const root = process.cwd();
               const outPath = path.resolve(root, 'complete_email_templates.json');
               const publicDir = path.resolve(root, 'public');
               const outPublic = path.resolve(publicDir, 'complete_email_templates.json');
               // write to repo root (for consistency) and public/ (so dev server serves it at /complete_email_templates.json)
+=======
+              const outPath = path.resolve(process.cwd(), 'complete_email_templates.json');
+>>>>>>> Stashed changes
               fs.writeFileSync(outPath, JSON.stringify(json, null, 2), 'utf-8');
               try { fs.mkdirSync(publicDir, { recursive: true }); } catch {}
               fs.writeFileSync(outPublic, JSON.stringify(json, null, 2), 'utf-8');
@@ -101,7 +108,7 @@ export default defineConfig(({ mode }) => {
     },
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, './src'),
+        '@': path.resolve(process.cwd(), './src'),
       },
     },
     build: {
