@@ -476,7 +476,7 @@
         "en": "Quotes – no approval required"
       },
       "description": {
-        "fr": "Courriel prêt à l’emploi concernant « Devis – sans approbation requise ».",
+        "fr": "Test",
         "en": "Ready-to-send email regarding “ Devis – sans approbation requise ”."
       },
       "subject": {
@@ -488,9 +488,9 @@
         "en": "Hello,\r\n\r\nWe have received Project <<ProjectNumber>>.  Based on our assessment, it will take approximately <<NbDays>> working day(s) to complete. As per your instructions, we have immediately begun working on the project and will deliver it by the expected deadline.\r\n\r\nPlease feel free to contact us if you have any questions or need more information.\r\n\r\nBest regards,"
       },
       "variables": [
+        "NbDays",
         "NbJours",
         "NumeroProjet",
-        "NbDays",
         "ProjectNumber"
       ]
     },
