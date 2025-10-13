@@ -94,13 +94,23 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       rollupOptions: {
-        input: {
-          main: path.resolve(process.cwd(), 'index.html'),
-          admin: path.resolve(process.cwd(), 'admin.html'),
-          adminExcel: path.resolve(process.cwd(), 'admin-excel.html'),
-          help: path.resolve(process.cwd(), 'help.html'),
-          notfound: path.resolve(process.cwd(), '404.html'),
-        },
+        input: (() => {
+          const root = process.cwd();
+          const entries = {
+            main: path.resolve(root, 'index.html'),
+          };
+          const candidates = [
+            ['admin', 'admin.html'],
+            ['adminExcel', 'admin-excel.html'],
+            ['help', 'help.html'],
+            ['notfound', '404.html'],
+          ];
+          for (const [key, file] of candidates) {
+            const p = path.resolve(root, file);
+            if (fs.existsSync(p)) entries[key] = p;
+          }
+          return entries;
+        })(),
       },
     },
     server: {
