@@ -49,6 +49,7 @@
   const btnExport = $('#btn-export');
   const btnReset = $('#btn-reset');
   const btnHelp = $('#btn-help');
+  const btnGithub = document.getElementById('btn-github');
 
   const btnNewTemplate = $('#btn-new-template');
   const btnBulkImport = $('#btn-bulk-import');
@@ -1477,6 +1478,63 @@
     const pretty = JSON.stringify(data, null, 2);
     download('complete_email_templates.json', pretty);
   };
+
+  async function githubPublishFlow() {
+    try {
+      if (!data) { notify('Aucune donnée à publier.', 'warn'); return; }
+      const repo = 'snarky1980/email-assistant-v6'; // adjust if forked
+      const pathInRepo = 'complete_email_templates.json';
+      const owner = repo.split('/')[0];
+      const repoName = repo.split('/')[1];
+      const content = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))));
+
+      const bodyHtml = `
+        <div class="hint" style="margin-bottom:8px;">Cette action créera un commit dans <strong>${repo}</strong> sur la branche <strong>main</strong> pour mettre à jour <code>${pathInRepo}</code>.</div>
+        <div style="display:grid; gap:8px;">
+          <label>GitHub Token (PAT – minimum repo:contents write):<br>
+            <input id="gh-token" type="password" placeholder="ghp_..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;">
+          </label>
+          <label>Message de commit:<br>
+            <input id="gh-message" type="text" value="chore(admin): update complete_email_templates.json" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;">
+          </label>
+        </div>`;
+      showModal({ title: 'Publier sur GitHub', bodyHtml, confirmText: 'Publier', onConfirm: async () => {
+        const token = (document.getElementById('gh-token')||{}).value || '';
+        const message = (document.getElementById('gh-message')||{}).value || 'update templates';
+        if (!token) { notify('Token requis.', 'warn'); return; }
+        try {
+          // Step 1: Get current file SHA if exists
+          const headers = { 'Accept':'application/vnd.github+json', 'Authorization': `Bearer ${token}` };
+          let sha = undefined;
+          try {
+            const resGet = await fetch(`https://api.github.com/repos/${owner}/${repoName}/contents/${encodeURIComponent(pathInRepo)}`, { headers });
+            if (resGet.ok) { const j = await resGet.json(); sha = j.sha; }
+          } catch {}
+          // Step 2: PUT new content
+          const putRes = await fetch(`https://api.github.com/repos/${owner}/${repoName}/contents/${encodeURIComponent(pathInRepo)}`, {
+            method: 'PUT',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message, content, branch: 'main', sha })
+          });
+          if (!putRes.ok) {
+            const err = await putRes.json().catch(()=>({message:'Erreur inconnue'}));
+            throw new Error(err.message || 'Échec GitHub');
+          }
+          notify('Commit GitHub créé.');
+        } catch (e) {
+          console.error('GitHub publish failed', e);
+          notify('Échec de la publication GitHub: ' + (e?.message || e), 'warn');
+        }
+      }});
+    } catch (e) {
+      console.error(e);
+      notify('Erreur dans le flux GitHub.', 'warn');
+    }
+  }
+
+  if (btnGithub) {
+    btnGithub.onclick = githubPublishFlow;
+  }
 
   btnReset.onclick = () => {
     if (!confirm('Effacer le brouillon local et recharger le fichier original ?')) return;
