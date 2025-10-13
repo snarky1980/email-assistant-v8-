@@ -987,6 +987,20 @@ function App() {
           </div>
         </div>
       </main>
+      {/* Build/version stamp (confirm live build) */}
+      <footer className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-6 text-xs text-slate-500">
+        <div className="mt-6 flex items-center gap-2">
+          <span>Version: {typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : ''}</span>
+          <span>•</span>
+          <span>Build: {typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : ''}</span>
+          {typeof __COMMIT_SHA__ !== 'undefined' && __COMMIT_SHA__ ? (
+            <>
+              <span>•</span>
+              <span>Commit: {(__COMMIT_SHA__ || '').slice(0,7)}</span>
+            </>
+          ) : null}
+        </div>
+      </footer>
         </>
       )}
 
