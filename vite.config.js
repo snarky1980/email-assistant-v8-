@@ -31,10 +31,16 @@ export default defineConfig(({ mode }) => {
                 res.end(JSON.stringify({ ok: false, error: 'Invalid payload. Expected { metadata, variables, templates }.' }));
                 return;
               }
-              const outPath = path.resolve(process.cwd(), 'complete_email_templates.json');
+              const root = process.cwd();
+              const outPath = path.resolve(root, 'complete_email_templates.json');
+              const publicDir = path.resolve(root, 'public');
+              const outPublic = path.resolve(publicDir, 'complete_email_templates.json');
+              // write to repo root (for consistency) and public/ (so dev server serves it at /complete_email_templates.json)
               fs.writeFileSync(outPath, JSON.stringify(json, null, 2), 'utf-8');
+              try { fs.mkdirSync(publicDir, { recursive: true }); } catch {}
+              fs.writeFileSync(outPublic, JSON.stringify(json, null, 2), 'utf-8');
               res.setHeader('Content-Type', 'application/json');
-              res.end(JSON.stringify({ ok: true, path: outPath }));
+              res.end(JSON.stringify({ ok: true, path: outPath, public: outPublic }));
             } catch (e) {
               res.statusCode = 500;
               res.setHeader('Content-Type', 'application/json');

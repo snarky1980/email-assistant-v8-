@@ -275,7 +275,7 @@ function App() {
       try {
         if (debug) console.log('[EA][Debug] Fetching templates (with prod raw GitHub fallback)...')
         const REPO_RAW_URL = 'https://raw.githubusercontent.com/snarky1980/email-assistant-v6/main/complete_email_templates.json'
-        const LOCAL_URL = './complete_email_templates.json'
+  const LOCAL_URL = '/complete_email_templates.json'
         const isLocal = /^(localhost|127\.|0\.0\.0\.0)/i.test(window.location.hostname)
         const ts = Date.now()
         const withBust = (u) => u + (u.includes('?') ? '&' : '?') + 'cb=' + ts
@@ -321,7 +321,7 @@ function App() {
     if (loading) return
     let cancelled = false
     const REPO_RAW_URL = 'https://raw.githubusercontent.com/snarky1980/email-assistant-v6/main/complete_email_templates.json'
-    const LOCAL_URL = './complete_email_templates.json'
+  const LOCAL_URL = '/complete_email_templates.json'
     const isLocal = /^(localhost|127\.|0\.0\.0\.0)/i.test(window.location.hostname)
     const getCandidates = () => {
       const ts = Date.now()
