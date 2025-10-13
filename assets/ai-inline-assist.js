@@ -6,7 +6,9 @@
  - Graceful degradation if backend unavailable.
 */
 (function(){
-  const JSON_PATH = 'complete_email_templates.json';
+  const REPO_RAW_URL = 'https://raw.githubusercontent.com/snarky1980/email-assistant-v6/main/complete_email_templates.json';
+  const LOCAL_JSON = 'complete_email_templates.json';
+  const isLocal = /^(localhost|127\.0\.0\.1)$/i.test(location.hostname);
   const MOUNT_ID = 'ai-inline-assistant-root';
   if (document.getElementById(MOUNT_ID)) return;
 
@@ -174,7 +176,27 @@
 
   function loadTemplates(statusEl, cb){
     statusEl.textContent='Chargement des modèles...';
-    fetch(JSON_PATH).then(r=>r.json()).then(j=>{ data=j; cb(); }).catch(e=>{ console.error(e); statusEl.textContent='Échec chargement modèles'; });
+    const ts = Date.now();
+    const withBust = (u) => u + (u.includes('?') ? '&' : '?') + 'cb=' + ts;
+    const candidates = isLocal
+      ? [withBust(LOCAL_JSON), withBust(REPO_RAW_URL)]
+      : [withBust(REPO_RAW_URL), withBust(LOCAL_JSON)];
+    (async () => {
+      for (const url of candidates) {
+        try {
+          const resp = await fetch(url, { cache:'no-cache' });
+          if (!resp.ok) throw new Error('HTTP '+resp.status);
+          const j = await resp.json();
+          data = j;
+          cb();
+          statusEl.textContent = 'Modèles chargés ('+(Array.isArray(data?.templates)?data.templates.length:0)+')';
+          return;
+        } catch (e) {
+          console.warn('[AI Inline Assist] fetch failed', url, e?.message||e);
+        }
+      }
+      statusEl.textContent='Échec chargement modèles';
+    })();
   }
 
   function populateCats(catSel){

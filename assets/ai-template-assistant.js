@@ -9,7 +9,9 @@
  Uses local /api/openai proxy (no API key in client).
 */
 (function(){
-  const JSON_PATH = 'complete_email_templates.json';
+  const REPO_RAW_URL = 'https://raw.githubusercontent.com/snarky1980/email-assistant-v6/main/complete_email_templates.json';
+  const LOCAL_JSON = 'complete_email_templates.json';
+  const isLocal = /^(localhost|127\.0\.0\.1|0\.0\.0\.0)$/i.test(location.hostname);
   const HOST_ID = 'ai-template-assistant-host';
   const STYLE_ID = 'ai-template-assistant-style';
 
@@ -174,7 +176,30 @@
 
   function loadJSON(){
     setStatus('Loading templates…');
-    fetch(JSON_PATH).then(r=>r.json()).then(j=>{ data=j; populateCategories(); populateTemplateList(); mergeCurrentTemplate(); langBadge.textContent=currentLang.toUpperCase(); setStatus('Templates loaded'); }).catch(err=>{ setStatus('Failed to load JSON','error'); console.error(err); });
+    const ts = Date.now();
+    const withBust = (u) => u + (u.includes('?') ? '&' : '?') + 'cb=' + ts;
+    const candidates = isLocal
+      ? [withBust(LOCAL_JSON), withBust(REPO_RAW_URL)]
+      : [withBust(REPO_RAW_URL), withBust(LOCAL_JSON)];
+    (async () => {
+      for (const url of candidates) {
+        try {
+          const resp = await fetch(url, { cache: 'no-cache' });
+          if (!resp.ok) throw new Error('HTTP '+resp.status);
+          const j = await resp.json();
+          data = j;
+          populateCategories();
+          populateTemplateList();
+          mergeCurrentTemplate();
+          langBadge.textContent=currentLang.toUpperCase();
+          setStatus('Templates loaded');
+          return;
+        } catch (e) {
+          console.warn('[AI Template Assistant] fetch failed', url, e?.message||e);
+        }
+      }
+      setStatus('Failed to load JSON','error');
+    })();
   }
 
   function populateCategories(){

@@ -270,14 +270,34 @@ function App() {
   useEffect(() => {
     const loadTemplatesData = async () => {
       try {
-        if (debug) console.log('[EA][Debug] Fetching templates...')
-        const response = await fetch('./complete_email_templates.json')
-        if (!response.ok) {
-          throw new Error('Failed to load templates data')
+        if (debug) console.log('[EA][Debug] Fetching templates (with prod raw GitHub fallback)...')
+        const REPO_RAW_URL = 'https://raw.githubusercontent.com/snarky1980/email-assistant-v6/main/complete_email_templates.json'
+        const LOCAL_URL = './complete_email_templates.json'
+        const isLocal = /^(localhost|127\.|0\.0\.0\.0)/i.test(window.location.hostname)
+        const ts = Date.now()
+        const withBust = (u) => u + (u.includes('?') ? '&' : '?') + 'cb=' + ts
+        const candidates = isLocal
+          ? [withBust(LOCAL_URL), withBust(REPO_RAW_URL)]
+          : [withBust(REPO_RAW_URL), withBust(LOCAL_URL)]
+
+        let loaded = null
+        let lastErr = null
+        for (const url of candidates) {
+          try {
+            if (debug) console.log('[EA][Debug] Try fetch', url)
+            const resp = await fetch(url, { cache: 'no-cache' })
+            if (!resp.ok) throw new Error('HTTP ' + resp.status)
+            const j = await resp.json()
+            loaded = j
+            break
+          } catch (e) {
+            lastErr = e
+            if (debug) console.warn('[EA][Debug] fetch candidate failed', url, e?.message || e)
+          }
         }
-        const data = await response.json()
-        setTemplatesData(data)
-        if (debug) console.log('[EA][Debug] Templates loaded:', data.templates?.length)
+        if (!loaded) throw lastErr || new Error('No template source reachable')
+        setTemplatesData(loaded)
+        if (debug) console.log('[EA][Debug] Templates loaded:', loaded.templates?.length)
       } catch (error) {
         console.error('Error loading templates data:', error)
       } finally {
