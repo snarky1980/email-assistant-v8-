@@ -179,6 +179,8 @@ function App() {
   const [finalSubject, setFinalSubject] = useState('') // Final editable version
   const [finalBody, setFinalBody] = useState('') // Final editable version
   const [variables, setVariables] = useState(savedState.variables || {})
+  const [favorites, setFavorites] = useState(savedState.favorites || [])
+  const [favoritesOnly, setFavoritesOnly] = useState(savedState.favoritesOnly || false)
   const [copySuccess, setCopySuccess] = useState(false)
   const [showVariablePopup, setShowVariablePopup] = useState(false)
   
@@ -192,9 +194,11 @@ function App() {
       templateLanguage,
       searchQuery,
       selectedCategory,
-      variables
+      variables,
+      favorites,
+      favoritesOnly
     })
-  }, [interfaceLanguage, templateLanguage, searchQuery, selectedCategory, variables])
+  }, [interfaceLanguage, templateLanguage, searchQuery, selectedCategory, variables, favorites, favoritesOnly])
 
   // Interface texts by language
   const interfaceTexts = {
@@ -394,8 +398,13 @@ function App() {
       filtered = filtered.filter(template => template.category === selectedCategory)
     }
 
+    if (favoritesOnly) {
+      const favSet = new Set(favorites)
+      filtered = filtered.filter(t => favSet.has(t.id))
+    }
+
     return filtered
-  }, [templatesData, searchQuery, selectedCategory, templateLanguage])
+  }, [templatesData, searchQuery, selectedCategory, templateLanguage, favoritesOnly, favorites])
 
   // Get unique categories
   const categories = useMemo(() => {
@@ -403,6 +412,11 @@ function App() {
     const cats = [...new Set(templatesData.templates.map(t => t.category))]
     return cats
   }, [templatesData])
+
+  const isFav = (id) => favorites.includes(id)
+  const toggleFav = (id) => {
+    setFavorites(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
 
   // Replace variables in text
   const replaceVariables = (text) => {
@@ -633,7 +647,14 @@ function App() {
                   <FileText className="h-6 w-6 mr-2 text-emerald-600" />
                   {t.selectTemplate}
                 </CardTitle>
-                <p className="text-sm text-gray-600">{filteredTemplates.length} {t.templatesCount}</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-gray-600">{filteredTemplates.length} {t.templatesCount}</p>
+                  <button
+                    onClick={() => setFavoritesOnly(v => !v)}
+                    className={`text-xs px-2 py-1 rounded border ${favoritesOnly ? 'bg-yellow-100 border-yellow-300 text-yellow-800' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                    title="Show only favorites"
+                  >★ Favorites</button>
+                </div>
                 
                 {/* Category filter with style */}
                 <Select value={selectedCategory} onValueChange={setSelectedCategory}>
@@ -748,6 +769,12 @@ function App() {
                               {template.category}
                             </Badge>
                           </div>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleFav(template.id) }}
+                            className={`ml-3 text-lg ${isFav(template.id) ? 'text-yellow-500' : 'text-gray-300 hover:text-yellow-400'}`}
+                            title={isFav(template.id) ? 'Unfavorite' : 'Favorite'}
+                            aria-label="Toggle favorite"
+                          >★</button>
                         </div>
                       </div>
                     ))}

@@ -32,5 +32,7 @@ const getDefaultState = () => ({
   templateLanguage: 'fr',
   searchQuery: '',
   selectedCategory: 'all',
-  variables: {}
+  variables: {},
+  favorites: [],
+  favoritesOnly: false
 });
