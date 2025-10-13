@@ -3,7 +3,13 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 import fs from 'fs'
-import pkg from './package.json' assert { type: 'json' }
+import { fileURLToPath } from 'url'
+// Read package.json without JSON import attributes to keep Node 20 CI happy
+const pkg = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf-8'))
+
+// ESM-safe __dirname for Node 20+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 export default defineConfig(({ mode }) => {
   // Use GitHub Pages base only in production build; use root in dev to avoid nested path issues.
