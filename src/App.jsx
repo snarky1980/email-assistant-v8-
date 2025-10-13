@@ -228,6 +228,8 @@ function App() {
       copyBody: 'Copier Corps', 
       copyAll: 'Copier Tout',
       copied: 'Copié !',
+  copyLink: 'Copier le lien',
+  copyLinkTitle: 'Copier le lien direct vers ce modèle',
       noTemplate: 'Sélectionnez un modèle pour commencer',
       resetWarningTitle: 'Confirmer la réinitialisation',
       resetWarningMessage: 'Êtes-vous sûr de vouloir réinitialiser toutes les variables ? Cette action ne peut pas être annulée.',
@@ -260,6 +262,8 @@ function App() {
       copyBody: 'Copy Body',
       copyAll: 'Copy All',
       copied: 'Copied!',
+  copyLink: 'Copy link',
+  copyLinkTitle: 'Copy direct link to this template',
       noTemplate: 'Select a template to get started',
       resetWarningTitle: 'Confirm Reset',
       resetWarningMessage: 'Are you sure you want to reset all variables? This action cannot be undone.',
@@ -852,10 +856,10 @@ function App() {
                     variant="ghost" 
                     onClick={() => copyTemplateLink()}
                     className="text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 transition-all duration-300 font-medium text-sm"
-                    title="Copy direct link to this template"
+                    title={t.copyLinkTitle}
                   >
                     <Link className="h-4 w-4 mr-2" />
-                    Copy link
+                    {t.copyLink}
                   </Button>
                   
                   <div className="flex space-x-4">
