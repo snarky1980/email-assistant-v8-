@@ -1,13 +1,13 @@
 {
-  "name": "email-assistant-v6",
+  "name": "email-assistant-v8-",
   "private": false,
-  "version": "6.0.0",
+  "version": "8.0.0",
   "type": "module",
   "description": "Modern React app for professional email generation with AI assistance",
-  "homepage": "https://snarky1980.github.io/email-assistant-v6",
+  "homepage": "https://snarky1980.github.io/email-assistant-v8-",
   "repository": {
     "type": "git",
-    "url": "https://github.com/snarky1980/email-assistant-v6.git"
+    "url": "https://github.com/snarky1980/email-assistant-v8-.git"
   },
   "scripts": {
     "dev": "vite",
